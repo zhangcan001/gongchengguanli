@@ -1,6 +1,7 @@
 fastapi
 httpx
 openpyxl
+python-docx
 python-multipart
 pytest
 uvicorn[standard]

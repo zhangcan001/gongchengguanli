@@ -46,6 +46,10 @@ export interface FileAsset {
   uploaded_at: string;
 }
 
+export interface ExportFile extends FileAsset {
+  download_url: string;
+}
+
 export interface SmartInboxItem {
   id: number;
   project_id: number;

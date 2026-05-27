@@ -47,6 +47,12 @@ import {
   fetchDiaryMaterialSummary,
   fetchAISettings,
   fetchDiary,
+  exportDiaryWord,
+  exportIssueNotice,
+  exportIssueReview,
+  exportIssuesExcel,
+  exportPatrolWord,
+  exportProgressAnalysis,
   generateDiary,
   fetchIssue,
   fetchIssueArchiveCheck,
@@ -77,6 +83,7 @@ import type {
   DiaryDraft,
   DiaryMaterial,
   DiaryMaterialSummary,
+  ExportFile,
   FieldMapping,
   Issue,
   IssueActionPayload,
@@ -775,6 +782,8 @@ function ProgressDashboardView({
   const [overview, setOverview] = useState<ProgressOverview | null>(null);
   const [delayAnalysis, setDelayAnalysis] = useState<ProgressDelayAnalysis | null>(null);
   const [dataQuality, setDataQuality] = useState<ProgressDataQuality | null>(null);
+  const [exportFile, setExportFile] = useState<ExportFile | null>(null);
+  const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
@@ -808,9 +817,25 @@ function ProgressDashboardView({
 
   useEffect(() => {
     if (selectedProjectId) {
+      setExportFile(null);
       void loadDashboard(Number(selectedProjectId));
     }
   }, [selectedProjectId]);
+
+  async function handleExportProgressAnalysis() {
+    if (!selectedProjectId) {
+      return;
+    }
+    setExporting(true);
+    setError("");
+    try {
+      setExportFile(await exportProgressAnalysis(Number(selectedProjectId)));
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "进度分析 Excel 导出失败");
+    } finally {
+      setExporting(false);
+    }
+  }
 
   const noProjects = projects.length === 0;
   const hasNoProgressData = !loading && overview && !overview.latest_batch && overview.building_summary.length === 0;
@@ -828,20 +853,26 @@ function ProgressDashboardView({
               新建项目
             </button>
           ) : (
-            <label className="field compact-field dashboard-project-select" htmlFor="dashboard-project">
-              <span>当前项目</span>
-              <select
-                id="dashboard-project"
-                value={selectedProjectId}
-                onChange={(event) => setSelectedProjectId(Number(event.target.value))}
-              >
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="diary-header-actions">
+              <label className="field compact-field dashboard-project-select" htmlFor="dashboard-project">
+                <span>当前项目</span>
+                <select
+                  id="dashboard-project"
+                  value={selectedProjectId}
+                  onChange={(event) => setSelectedProjectId(Number(event.target.value))}
+                >
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="ghost-button" type="button" disabled={exporting || !selectedProjectId} onClick={() => void handleExportProgressAnalysis()}>
+                <Download size={18} />
+                {exporting ? "导出中..." : "导出进度分析 Excel"}
+              </button>
+            </div>
           )
         }
       />
@@ -853,6 +884,7 @@ function ProgressDashboardView({
       )}
       {error && <div className="error-banner">{error}</div>}
       {loading && <section className="panel"><EmptyLine text="正在加载进度看板..." /></section>}
+      {exportFile && <ExportResultCard file={exportFile} />}
 
       {!noProjects && overview && (
         <>
@@ -948,6 +980,26 @@ function MetricCard({ title, value, hint, tone }: { title: string; value: string
   );
 }
 
+function ExportResultCard({ file }: { file: ExportFile }) {
+  const directoryPath = file.file_path.split(/[\\/]/).slice(0, -1).join("/") || "data/files/exports";
+  return (
+    <article className="export-result-card">
+      <div>
+        <span className="eyebrow">EXPORT READY</span>
+        <strong>{file.original_file_name}</strong>
+        <small>{file.file_path}</small>
+      </div>
+      <div className="export-result-actions">
+        <a className="primary-button" href={file.download_url} target="_blank" rel="noreferrer">
+          <Download size={18} />
+          打开文件
+        </a>
+        <span className="export-directory">目录：{directoryPath}</span>
+      </div>
+    </article>
+  );
+}
+
 function QuickRecordView({ projects, onNewProject }: { projects: Project[]; onNewProject: () => void }) {
   const [selectedProjectId, setSelectedProjectId] = useState<number | "">(projects[0]?.id ?? "");
   const [content, setContent] = useState("");
@@ -959,6 +1011,8 @@ function QuickRecordView({ projects, onNewProject }: { projects: Project[]; onNe
   const [fields, setFields] = useState<QuickRecordConfirmFields | null>(null);
   const [actions, setActions] = useState<string[]>([]);
   const [confirmResult, setConfirmResult] = useState<QuickRecordConfirmResult | null>(null);
+  const [exportFile, setExportFile] = useState<ExportFile | null>(null);
+  const [exporting, setExporting] = useState(false);
 
   useEffect(() => {
     if (!selectedProjectId && projects[0]?.id) {
@@ -980,6 +1034,7 @@ function QuickRecordView({ projects, onNewProject }: { projects: Project[]; onNe
     setError("");
     setMessage("");
     setConfirmResult(null);
+    setExportFile(null);
     try {
       const result = await analyzeQuickRecord(Number(selectedProjectId), content.trim());
       setAnalysis(result);
@@ -1024,11 +1079,27 @@ function QuickRecordView({ projects, onNewProject }: { projects: Project[]; onNe
     try {
       const result = await confirmQuickRecord(Number(selectedProjectId), normalizeQuickFields(fields), actions);
       setConfirmResult(result);
+      setExportFile(null);
       setMessage("正式记录已生成。");
     } catch (confirmError) {
       setError(confirmError instanceof Error ? confirmError.message : "确认生成失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleExportPatrol() {
+    if (!confirmResult?.patrol_record_id) {
+      return;
+    }
+    setExporting(true);
+    setError("");
+    try {
+      setExportFile(await exportPatrolWord(confirmResult.patrol_record_id));
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "巡视记录 Word 导出失败");
+    } finally {
+      setExporting(false);
     }
   }
 
@@ -1180,10 +1251,17 @@ function QuickRecordView({ projects, onNewProject }: { projects: Project[]; onNe
                     <Info label="巡视记录" value={confirmResult.patrol_record_id ? `#${confirmResult.patrol_record_id}` : "未生成"} />
                     <Info label="问题草稿" value={confirmResult.issue_id ? `#${confirmResult.issue_id}` : "未生成"} />
                     <Info label="日志素材" value={confirmResult.diary_material_id ? `#${confirmResult.diary_material_id}` : "未生成"} />
+                    {confirmResult.patrol_record_id && (
+                      <button className="ghost-button" type="button" disabled={exporting} onClick={() => void handleExportPatrol()}>
+                        <Download size={18} />
+                        {exporting ? "导出中..." : "导出巡视记录 Word"}
+                      </button>
+                    )}
                   </div>
                 ) : (
                   <EmptyLine text="确认生成后，这里会显示写入的记录编号。" />
                 )}
+                {exportFile && <ExportResultCard file={exportFile} />}
               </section>
             </section>
           )}
@@ -1250,6 +1328,8 @@ function IssuesView({ projects, onNewProject }: { projects: Project[]; onNewProj
   const [operator, setOperator] = useState("");
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportFile, setExportFile] = useState<ExportFile | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -1298,6 +1378,7 @@ function IssuesView({ projects, onNewProject }: { projects: Project[]; onNewProj
     setError("");
     setMessage("");
     setArchiveCheck(null);
+    setExportFile(null);
     try {
       setSelectedIssue(await fetchIssue(issue.id));
     } catch (detailError) {
@@ -1389,6 +1470,36 @@ function IssuesView({ projects, onNewProject }: { projects: Project[]; onNewProj
     }
   }
 
+  async function handleExportIssuesExcel() {
+    if (!selectedProjectId) {
+      return;
+    }
+    setExporting(true);
+    setError("");
+    try {
+      setExportFile(await exportIssuesExcel(Number(selectedProjectId)));
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "问题台账 Excel 导出失败");
+    } finally {
+      setExporting(false);
+    }
+  }
+
+  async function handleIssueExport(kind: "notice" | "review") {
+    if (!selectedIssue) {
+      return;
+    }
+    setExporting(true);
+    setError("");
+    try {
+      setExportFile(kind === "notice" ? await exportIssueNotice(selectedIssue.id) : await exportIssueReview(selectedIssue.id));
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "问题资料 Word 导出失败");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   function handleKeywordSubmit(event: FormEvent) {
     event.preventDefault();
     void loadIssues();
@@ -1409,20 +1520,26 @@ function IssuesView({ projects, onNewProject }: { projects: Project[]; onNewProj
               新建项目
             </button>
           ) : (
-            <label className="field compact-field dashboard-project-select" htmlFor="issues-project">
-              <span>当前项目</span>
-              <select
-                id="issues-project"
-                value={selectedProjectId}
-                onChange={(event) => setSelectedProjectId(Number(event.target.value))}
-              >
-                {projects.map((project) => (
-                  <option key={project.id} value={project.id}>
-                    {project.name}
-                  </option>
-                ))}
-              </select>
-            </label>
+            <div className="diary-header-actions">
+              <label className="field compact-field dashboard-project-select" htmlFor="issues-project">
+                <span>当前项目</span>
+                <select
+                  id="issues-project"
+                  value={selectedProjectId}
+                  onChange={(event) => setSelectedProjectId(Number(event.target.value))}
+                >
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <button className="ghost-button" type="button" disabled={exporting || !selectedProjectId} onClick={() => void handleExportIssuesExcel()}>
+                <Download size={18} />
+                {exporting ? "导出中..." : "导出问题台账 Excel"}
+              </button>
+            </div>
           )
         }
       />
@@ -1491,6 +1608,7 @@ function IssuesView({ projects, onNewProject }: { projects: Project[]; onNewProj
 
               {error && <div className="error-banner">{error}</div>}
               {message && <div className="success-banner">{message}</div>}
+              {exportFile && <ExportResultCard file={exportFile} />}
 
               {showCreate && (
                 <form className="issue-create-form" onSubmit={handleCreateIssue}>
@@ -1570,6 +1688,9 @@ function IssuesView({ projects, onNewProject }: { projects: Project[]; onNewProj
               onOperatorChange={setOperator}
               onRunAction={runIssueAction}
               onArchiveCheck={handleArchiveCheck}
+              onExportNotice={() => handleIssueExport("notice")}
+              onExportReview={() => handleIssueExport("review")}
+              exporting={exporting}
             />
           </section>
         </>
@@ -1588,6 +1709,9 @@ function IssueDetailPanel({
   onOperatorChange,
   onRunAction,
   onArchiveCheck,
+  onExportNotice,
+  onExportReview,
+  exporting,
 }: {
   issue: Issue | null;
   archiveCheck: IssueArchiveCheck | null;
@@ -1598,6 +1722,9 @@ function IssueDetailPanel({
   onOperatorChange: (value: string) => void;
   onRunAction: (kind: "notify" | "reply" | "review" | "close" | "reopen") => Promise<void>;
   onArchiveCheck: () => Promise<void>;
+  onExportNotice: () => Promise<void>;
+  onExportReview: () => Promise<void>;
+  exporting: boolean;
 }) {
   if (!issue) {
     return (
@@ -1655,6 +1782,14 @@ function IssueDetailPanel({
           </button>
           <button className="ghost-button" type="button" disabled={working} onClick={() => void onArchiveCheck()}>
             完整度检查
+          </button>
+          <button className="ghost-button" type="button" disabled={exporting} onClick={() => void onExportNotice()}>
+            <Download size={16} />
+            {exporting ? "导出中..." : "导出整改通知单"}
+          </button>
+          <button className="ghost-button" type="button" disabled={exporting} onClick={() => void onExportReview()}>
+            <Download size={16} />
+            {exporting ? "导出中..." : "导出复查记录"}
           </button>
         </div>
       </div>
@@ -1740,6 +1875,8 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [exporting, setExporting] = useState(false);
+  const [exportFile, setExportFile] = useState<ExportFile | null>(null);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -1764,6 +1901,7 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
       setMaterials(materialItems);
       setSummary(materialSummary);
       setExistingDiary(diaryDetail);
+      setExportFile(null);
       if (diaryDetail) {
         setDraft(draftFromDiary(diaryDetail));
         setWeather(diaryDetail.weather ?? "");
@@ -1948,6 +2086,22 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
     setDraft((current) => ({ ...current, [field]: value }));
   }
 
+  async function handleExportDiary() {
+    if (!existingDiary?.id) {
+      setError("请先生成并确认保存日志后再导出。");
+      return;
+    }
+    setExporting(true);
+    setError("");
+    try {
+      setExportFile(await exportDiaryWord(existingDiary.id));
+    } catch (exportError) {
+      setError(exportError instanceof Error ? exportError.message : "监理日志 Word 导出失败");
+    } finally {
+      setExporting(false);
+    }
+  }
+
   const noProjects = projects.length === 0;
   const diaryStatus = existingDiary ? (existingDiary.confirmed ? "已确认" : "已生成未确认") : "未生成";
 
@@ -2038,12 +2192,13 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
                 <Sparkles size={18} />
                 {generating ? "生成中..." : "一键生成"}
               </button>
-              <button className="ghost-button" type="button" onClick={() => setMessage("Word 正式导出将在阶段 9 实现，当前仅保留入口占位。")}>
+              <button className="ghost-button" type="button" disabled={exporting || !existingDiary?.id} onClick={() => void handleExportDiary()}>
                 <Download size={18} />
-                导出 Word
+                {exporting ? "导出中..." : "导出 Word"}
               </button>
             </div>
           </section>
+          {exportFile && <ExportResultCard file={exportFile} />}
 
           <section className="panel diary-draft-panel">
             <div className="list-toolbar">

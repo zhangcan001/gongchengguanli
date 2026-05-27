@@ -62,6 +62,14 @@ class FileAsset(BaseModel):
     uploaded_at: datetime
 
 
+class ExportFileResponse(FileAsset):
+    download_url: str
+
+
+class ProgressExportAnalysisRequest(BaseModel):
+    project_id: int
+
+
 class SmartInboxItem(BaseModel):
     id: int
     project_id: int

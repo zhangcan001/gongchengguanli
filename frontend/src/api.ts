@@ -9,6 +9,7 @@ import type {
   DiaryMaterialInput,
   DiaryMaterialSummary,
   DiaryMaterialUpdateInput,
+  ExportFile,
   FieldMapping,
   Issue,
   IssueAction,
@@ -150,6 +151,13 @@ export async function fetchProgressDataQuality(projectId: number): Promise<Progr
   return request<ProgressDataQuality>(`/api/progress/data-quality?project_id=${projectId}`);
 }
 
+export async function exportProgressAnalysis(projectId: number): Promise<ExportFile> {
+  return request<ExportFile>("/api/progress/export-analysis", {
+    method: "POST",
+    body: JSON.stringify({ project_id: projectId }),
+  });
+}
+
 export async function analyzeQuickRecord(projectId: number, content: string): Promise<QuickRecordAnalyzeResult> {
   return request<QuickRecordAnalyzeResult>("/api/quick-record/analyze", {
     method: "POST",
@@ -245,6 +253,24 @@ export async function fetchIssueSummary(projectId?: number): Promise<IssueSummar
   return request<IssueSummary>(`/api/issues/summary${query}`);
 }
 
+export async function exportIssuesExcel(projectId: number): Promise<ExportFile> {
+  return request<ExportFile>(`/api/issues/export-excel?project_id=${projectId}`, {
+    method: "POST",
+  });
+}
+
+export async function exportIssueNotice(issueId: number): Promise<ExportFile> {
+  return request<ExportFile>(`/api/issues/${issueId}/export-notice`, {
+    method: "POST",
+  });
+}
+
+export async function exportIssueReview(issueId: number): Promise<ExportFile> {
+  return request<ExportFile>(`/api/issues/${issueId}/export-review`, {
+    method: "POST",
+  });
+}
+
 export async function fetchDiaryMaterials(projectId: number, materialDate: string): Promise<DiaryMaterial[]> {
   return request<DiaryMaterial[]>(`/api/diary/materials?project_id=${projectId}&date=${encodeURIComponent(materialDate)}`);
 }
@@ -316,6 +342,18 @@ export async function fetchDiary(projectId: number, diaryDate: string): Promise<
 
 export async function fetchDiaryList(projectId: number): Promise<Diary[]> {
   return request<Diary[]>(`/api/diary/list?project_id=${projectId}`);
+}
+
+export async function exportDiaryWord(diaryId: number): Promise<ExportFile> {
+  return request<ExportFile>(`/api/diary/${diaryId}/export`, {
+    method: "POST",
+  });
+}
+
+export async function exportPatrolWord(patrolId: number): Promise<ExportFile> {
+  return request<ExportFile>(`/api/patrol/${patrolId}/export`, {
+    method: "POST",
+  });
 }
 
 function issueAction(path: string, payload: IssueActionPayload): Promise<Issue> {

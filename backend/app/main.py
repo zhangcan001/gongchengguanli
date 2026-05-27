@@ -6,6 +6,7 @@ from datetime import date
 
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import FileResponse
 
 from .config import Settings, get_settings
 from .database import get_connection, initialize_database
@@ -21,6 +22,7 @@ from .models import (
     DiaryMaterialCreate,
     DiaryMaterialSummaryResponse,
     DiaryMaterialUpdate,
+    ExportFileResponse,
     HealthResponse,
     Issue,
     IssueAction,
@@ -34,6 +36,7 @@ from .models import (
     IssueUpdate,
     ProgressDataQualityResponse,
     ProgressDelayAnalysisResponse,
+    ProgressExportAnalysisRequest,
     ProgressImportAnalyzeRequest,
     ProgressImportAnalyzeResponse,
     ProgressImportBatch,
@@ -54,6 +57,7 @@ from .models import (
 from .ai_service import AIService
 from .diary import DiaryService
 from .diary_materials import DiaryMaterialService
+from .export_service import ExportService
 from .issues import IssueService
 from .progress_analytics import ProgressAnalyticsService
 from .progress_import import (
@@ -136,6 +140,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
         if error.code == ErrorCode.AI_SETTINGS_INVALID:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.FILE_ASSET_NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.FILE_NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.PATROL_RECORD_NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"code": "UNKNOWN_ERROR", "message": "Unknown error."})
 
     @app.get("/api/health", response_model=HealthResponse)
@@ -291,6 +301,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except RepositoryError as error:
             handle_repository_error(error)
 
+    @app.post("/api/progress/export-analysis", response_model=ExportFileResponse)
+    def api_export_progress_analysis(
+        payload: ProgressExportAnalysisRequest,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ExportService(connection, app_settings).export_progress_analysis_excel(payload.project_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
     @app.get("/api/settings/ai", response_model=AISettings)
     def api_get_ai_settings(connection: sqlite3.Connection = Depends(get_db)) -> dict:
         return AIService(connection).get_settings(masked=True)
@@ -312,6 +332,16 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         try:
             return IssueService(connection).summary(project_id=project_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/issues/export-excel", response_model=ExportFileResponse)
+    def api_export_issues_excel(
+        project_id: int = Query(...),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ExportService(connection, app_settings).export_issues_excel(project_id)
         except RepositoryError as error:
             handle_repository_error(error)
 
@@ -430,6 +460,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except RepositoryError as error:
             handle_repository_error(error)
 
+    @app.post("/api/diary/{diary_id}/export", response_model=ExportFileResponse)
+    def api_export_diary(
+        diary_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ExportService(connection, app_settings).export_diary_word(diary_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/patrol/{patrol_id}/export", response_model=ExportFileResponse)
+    def api_export_patrol(
+        patrol_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ExportService(connection, app_settings).export_patrol_word(patrol_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
     @app.get("/api/issues", response_model=list[Issue])
     def api_list_issues(
         project_id: int | None = Query(default=None),
@@ -484,6 +534,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         try:
             return IssueService(connection).update_issue(issue_id, payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/issues/{issue_id}/export-notice", response_model=ExportFileResponse)
+    def api_export_issue_notice(
+        issue_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ExportService(connection, app_settings).export_issue_notice_word(issue_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/issues/{issue_id}/export-review", response_model=ExportFileResponse)
+    def api_export_issue_review(
+        issue_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ExportService(connection, app_settings).export_issue_review_word(issue_id)
         except RepositoryError as error:
             handle_repository_error(error)
 
@@ -579,6 +649,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         try:
             return QuickRecordService(connection).confirm(payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/files/{file_id}/download")
+    def api_download_file(
+        file_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> FileResponse:
+        try:
+            file_path, asset = ExportService(connection, app_settings).resolve_download_path(file_id)
+            return FileResponse(
+                file_path,
+                filename=asset["original_file_name"],
+                media_type=asset["mime_type"] or "application/octet-stream",
+            )
         except RepositoryError as error:
             handle_repository_error(error)
 

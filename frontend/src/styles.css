@@ -812,6 +812,42 @@ p {
   font-size: 12px;
 }
 
+.export-result-card {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 18px;
+  padding: 18px;
+  border: 1px solid rgba(63, 218, 255, 0.28);
+  border-radius: 18px;
+  background:
+    linear-gradient(135deg, rgba(25, 118, 255, 0.16), rgba(32, 255, 216, 0.08)),
+    rgba(7, 17, 34, 0.86);
+  box-shadow: 0 0 28px rgba(33, 158, 255, 0.14);
+}
+
+.export-result-card strong {
+  display: block;
+  margin: 4px 0;
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.export-result-card small,
+.export-directory {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.export-result-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  flex-wrap: wrap;
+  gap: 10px;
+  min-width: 220px;
+}
+
 .metric-card.blue {
   border-color: rgba(43, 168, 255, 0.36);
 }
@@ -2077,6 +2113,7 @@ p {
   .detail-head,
   .issue-detail-head,
   .issue-search,
+  .export-result-card,
   .diary-header-actions,
   .quick-console-footer,
   .publish-bar {
