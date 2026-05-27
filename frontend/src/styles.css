@@ -41,6 +41,10 @@ select {
   font: inherit;
 }
 
+textarea {
+  font: inherit;
+}
+
 button {
   cursor: pointer;
 }
@@ -978,6 +982,170 @@ p {
   background: rgba(84, 226, 155, 0.16);
 }
 
+.used-flag.draft,
+.diary-status-card strong.draft {
+  color: #e9e4ff;
+  background: rgba(140, 125, 255, 0.16);
+}
+
+.diary-status-card strong.used {
+  color: var(--green);
+}
+
+.diary-generate-console {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(30, 232, 214, 0.32);
+  border-radius: 18px;
+  padding: 22px;
+  background:
+    linear-gradient(135deg, rgba(10, 35, 61, 0.92), rgba(4, 16, 30, 0.78)),
+    radial-gradient(circle at 86% 18%, rgba(30, 232, 214, 0.18), transparent 30%);
+  box-shadow:
+    0 24px 70px rgba(0, 0, 0, 0.3),
+    inset 0 0 48px rgba(43, 168, 255, 0.08);
+  backdrop-filter: blur(20px);
+}
+
+.diary-generate-console::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0;
+  background: linear-gradient(180deg, transparent, rgba(30, 232, 214, 0.16), transparent);
+  transform: translateY(-100%);
+}
+
+.diary-generate-console.is-generating::after {
+  animation: quick-scan 1.2s ease-in-out infinite;
+  opacity: 1;
+}
+
+.diary-generate-grid {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  grid-template-columns: minmax(160px, 0.3fr) minmax(160px, 0.3fr) minmax(280px, 1fr);
+  gap: 14px;
+}
+
+.diary-manual-note-field textarea {
+  width: 100%;
+  min-height: 86px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  color: var(--text);
+  outline: none;
+  resize: vertical;
+  background: rgba(3, 16, 29, 0.76);
+  line-height: 1.6;
+}
+
+.diary-manual-note-field textarea:focus {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 3px rgba(43, 168, 255, 0.12);
+}
+
+.diary-generate-actions {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.diary-draft-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.diary-draft-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.diary-draft-field {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(79, 206, 255, 0.18);
+  border-radius: 16px;
+  padding: 14px;
+  background: rgba(6, 21, 38, 0.58);
+}
+
+.diary-draft-field span {
+  color: var(--text);
+  font-weight: 700;
+}
+
+.diary-draft-field small {
+  color: var(--muted);
+}
+
+.diary-draft-field textarea {
+  width: 100%;
+  min-height: 132px;
+  border: 1px solid var(--line);
+  border-radius: 14px;
+  padding: 12px;
+  color: var(--text);
+  outline: none;
+  resize: vertical;
+  background: rgba(3, 16, 29, 0.78);
+  line-height: 1.65;
+}
+
+.diary-draft-field textarea:focus {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 3px rgba(43, 168, 255, 0.12);
+}
+
+.settings-grid {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.58fr) minmax(280px, 0.42fr);
+  gap: 18px;
+}
+
+.settings-form,
+.settings-note-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.settings-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+}
+
+.settings-note-list {
+  display: grid;
+  gap: 12px;
+}
+
+.settings-note-list div {
+  display: grid;
+  gap: 6px;
+  border: 1px solid rgba(79, 206, 255, 0.16);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(6, 21, 38, 0.58);
+}
+
+.settings-note-list strong {
+  color: var(--text);
+}
+
+.settings-note-list span {
+  color: var(--muted);
+  line-height: 1.6;
+}
+
 .issue-workbench {
   display: grid;
   grid-template-columns: minmax(420px, 0.95fr) minmax(0, 1.05fr);
@@ -1824,7 +1992,10 @@ p {
   .dashboard-metrics,
   .dashboard-grid,
   .issue-metrics,
-  .diary-metrics {
+  .diary-metrics,
+  .diary-draft-grid,
+  .settings-grid,
+  .diary-generate-grid {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1871,6 +2042,9 @@ p {
     .dashboard-grid,
     .issue-metrics,
     .diary-metrics,
+    .diary-draft-grid,
+    .settings-grid,
+    .diary-generate-grid,
     .issue-workbench,
     .diary-workbench,
     .issue-summary-card,

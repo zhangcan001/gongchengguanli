@@ -1,4 +1,10 @@
 import type {
+  AISettings,
+  AISettingsInput,
+  Diary,
+  DiaryConfirmInput,
+  DiaryGenerateInput,
+  DiaryGenerateResult,
   DiaryMaterial,
   DiaryMaterialInput,
   DiaryMaterialSummary,
@@ -277,6 +283,39 @@ export async function markDiaryMaterialUnused(materialId: number): Promise<Diary
 
 export async function fetchDiaryMaterialSummary(projectId: number, materialDate: string): Promise<DiaryMaterialSummary> {
   return request<DiaryMaterialSummary>(`/api/diary/materials/summary?project_id=${projectId}&date=${encodeURIComponent(materialDate)}`);
+}
+
+export async function fetchAISettings(): Promise<AISettings> {
+  return request<AISettings>("/api/settings/ai");
+}
+
+export async function saveAISettings(payload: AISettingsInput): Promise<AISettings> {
+  return request<AISettings>("/api/settings/ai", {
+    method: "PUT",
+    body: JSON.stringify(payload),
+  });
+}
+
+export async function generateDiary(payload: DiaryGenerateInput): Promise<DiaryGenerateResult> {
+  return request<DiaryGenerateResult>("/api/diary/generate", {
+    method: "POST",
+    body: JSON.stringify(normalizeObject(payload)),
+  });
+}
+
+export async function confirmDiary(payload: DiaryConfirmInput): Promise<Diary> {
+  return request<Diary>("/api/diary/confirm", {
+    method: "POST",
+    body: JSON.stringify(normalizeObject(payload)),
+  });
+}
+
+export async function fetchDiary(projectId: number, diaryDate: string): Promise<Diary | null> {
+  return request<Diary | null>(`/api/diary?project_id=${projectId}&date=${encodeURIComponent(diaryDate)}`);
+}
+
+export async function fetchDiaryList(projectId: number): Promise<Diary[]> {
+  return request<Diary[]>(`/api/diary/list?project_id=${projectId}`);
 }
 
 function issueAction(path: string, payload: IssueActionPayload): Promise<Issue> {

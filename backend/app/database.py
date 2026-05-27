@@ -211,6 +211,57 @@ CREATE TABLE IF NOT EXISTS diary_material (
 """
 
 
+DIARY_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS diary (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    diary_date TEXT NOT NULL,
+    weather TEXT,
+    temperature TEXT,
+    construction_summary TEXT,
+    workers_summary TEXT,
+    machinery_summary TEXT,
+    quality_summary TEXT,
+    safety_summary TEXT,
+    patrol_summary TEXT,
+    issue_summary TEXT,
+    handling_opinion TEXT,
+    tomorrow_plan TEXT,
+    ai_generated INTEGER NOT NULL DEFAULT 0,
+    confirmed INTEGER NOT NULL DEFAULT 0,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    UNIQUE(project_id, diary_date),
+    FOREIGN KEY (project_id) REFERENCES project(id)
+);
+"""
+
+
+AI_GENERATION_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS ai_generation (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER,
+    task_type TEXT NOT NULL,
+    source_data_summary TEXT,
+    prompt TEXT,
+    result TEXT,
+    accepted INTEGER NOT NULL DEFAULT 0,
+    edited_result TEXT,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (project_id) REFERENCES project(id)
+);
+"""
+
+
+APP_SETTING_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS app_setting (
+    key TEXT PRIMARY KEY,
+    value TEXT NOT NULL,
+    updated_at TEXT NOT NULL DEFAULT (datetime('now'))
+);
+"""
+
+
 def connect_database(database_path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(database_path, check_same_thread=False)
     connection.row_factory = sqlite3.Row
@@ -231,6 +282,9 @@ def initialize_database(settings: Settings) -> None:
         connection.execute(ISSUE_ACTION_TABLE_SQL)
         connection.execute(PATROL_RECORD_TABLE_SQL)
         connection.execute(DIARY_MATERIAL_TABLE_SQL)
+        connection.execute(DIARY_TABLE_SQL)
+        connection.execute(AI_GENERATION_TABLE_SQL)
+        connection.execute(APP_SETTING_TABLE_SQL)
         connection.execute("UPDATE diary_material SET source_type = 'progress' WHERE source_type = 'progress_import'")
         connection.execute("UPDATE diary_material SET source_type = 'manual' WHERE source_type = 'quick_record'")
         connection.commit()

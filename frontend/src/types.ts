@@ -415,3 +415,74 @@ export interface DiaryMaterialSummary {
   unused_count: number;
   total_count: number;
 }
+
+export interface AISettings {
+  base_url: string;
+  api_key: string;
+  model: string;
+  configured: boolean;
+}
+
+export interface AISettingsInput {
+  base_url: string;
+  api_key: string;
+  model: string;
+}
+
+export interface DiaryDraft {
+  construction_summary: string;
+  workers_summary: string;
+  machinery_summary: string;
+  quality_summary: string;
+  safety_summary: string;
+  patrol_summary: string;
+  issue_summary: string;
+  handling_opinion: string;
+  tomorrow_plan: string;
+}
+
+export interface DiaryGenerateInput {
+  project_id: number;
+  diary_date: string;
+  weather?: string | null;
+  temperature?: string | null;
+  manual_note?: string | null;
+}
+
+export interface DiaryGenerateResult {
+  draft: DiaryDraft;
+  ai_generation_id: number;
+  used_ai: boolean;
+  message: string | null;
+}
+
+export interface DiaryConfirmInput {
+  project_id: number;
+  diary_date: string;
+  weather?: string | null;
+  temperature?: string | null;
+  ai_generation_id?: number | null;
+  draft: DiaryDraft;
+}
+
+export interface Diary {
+  id: number;
+  project_id: number;
+  diary_date: string;
+  weather: string | null;
+  temperature: string | null;
+  construction_summary: string | null;
+  workers_summary: string | null;
+  machinery_summary: string | null;
+  quality_summary: string | null;
+  safety_summary: string | null;
+  patrol_summary: string | null;
+  issue_summary: string | null;
+  handling_opinion: string | null;
+  tomorrow_plan: string | null;
+  ai_generated: boolean;
+  confirmed: boolean;
+  created_at: string;
+  updated_at: string;
+  project_name: string | null;
+}

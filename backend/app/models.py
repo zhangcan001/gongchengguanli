@@ -470,3 +470,74 @@ class DiaryMaterialSummaryResponse(BaseModel):
     used_count: int
     unused_count: int
     total_count: int
+
+
+class AISettings(BaseModel):
+    base_url: str = ""
+    api_key: str = ""
+    model: str = ""
+    configured: bool = False
+
+
+class AISettingsUpdate(BaseModel):
+    base_url: str = Field(default="", max_length=500)
+    api_key: str = Field(default="", max_length=500)
+    model: str = Field(default="", max_length=120)
+
+
+class DiaryDraft(BaseModel):
+    construction_summary: str = ""
+    workers_summary: str = ""
+    machinery_summary: str = ""
+    quality_summary: str = ""
+    safety_summary: str = ""
+    patrol_summary: str = ""
+    issue_summary: str = ""
+    handling_opinion: str = ""
+    tomorrow_plan: str = ""
+
+
+class DiaryGenerateRequest(BaseModel):
+    project_id: int
+    diary_date: date
+    weather: str | None = Field(default=None, max_length=80)
+    temperature: str | None = Field(default=None, max_length=80)
+    manual_note: str | None = Field(default=None, max_length=4000)
+
+
+class DiaryGenerateResponse(BaseModel):
+    draft: DiaryDraft
+    ai_generation_id: int
+    used_ai: bool
+    message: str | None = None
+
+
+class DiaryConfirmRequest(BaseModel):
+    project_id: int
+    diary_date: date
+    weather: str | None = Field(default=None, max_length=80)
+    temperature: str | None = Field(default=None, max_length=80)
+    draft: DiaryDraft
+    ai_generation_id: int | None = None
+
+
+class Diary(BaseModel):
+    id: int
+    project_id: int
+    diary_date: date
+    weather: str | None = None
+    temperature: str | None = None
+    construction_summary: str | None = None
+    workers_summary: str | None = None
+    machinery_summary: str | None = None
+    quality_summary: str | None = None
+    safety_summary: str | None = None
+    patrol_summary: str | None = None
+    issue_summary: str | None = None
+    handling_opinion: str | None = None
+    tomorrow_plan: str | None = None
+    ai_generated: bool
+    confirmed: bool
+    created_at: datetime
+    updated_at: datetime
+    project_name: str | None = None

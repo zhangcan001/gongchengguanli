@@ -10,6 +10,7 @@ import {
   ClipboardList,
   ClipboardCheck,
   BookOpenText,
+  Download,
   Edit3,
   FileUp,
   FileText,
@@ -23,6 +24,7 @@ import {
   Plus,
   Radar,
   Save,
+  Settings,
   ShieldCheck,
   Sparkles,
   Trash2,
@@ -34,6 +36,7 @@ import {
   analyzeQuickRecord,
   analyzeProgressImport,
   closeIssue,
+  confirmDiary,
   confirmQuickRecord,
   createDiaryMaterial,
   createIssue,
@@ -42,6 +45,9 @@ import {
   deleteProject,
   fetchDiaryMaterials,
   fetchDiaryMaterialSummary,
+  fetchAISettings,
+  fetchDiary,
+  generateDiary,
   fetchIssue,
   fetchIssueArchiveCheck,
   fetchIssues,
@@ -60,11 +66,15 @@ import {
   reopenIssue,
   replyIssue,
   reviewIssue,
+  saveAISettings,
   uploadSmartInboxFile,
   validateProgressImport,
   updateDiaryMaterial,
 } from "./api";
 import type {
+  AISettings,
+  Diary,
+  DiaryDraft,
   DiaryMaterial,
   DiaryMaterialSummary,
   FieldMapping,
@@ -96,6 +106,7 @@ type View =
   | { name: "quick-record" }
   | { name: "issues" }
   | { name: "diary-materials" }
+  | { name: "settings" }
   | { name: "new-project" }
   | { name: "project-detail"; projectId: number };
 
@@ -125,6 +136,7 @@ function App() {
   const [homeProgressOverview, setHomeProgressOverview] = useState<ProgressOverview | null>(null);
   const [homeIssueSummary, setHomeIssueSummary] = useState<IssueSummary | null>(null);
   const [homeDiarySummary, setHomeDiarySummary] = useState<DiaryMaterialSummary | null>(null);
+  const [homeDiary, setHomeDiary] = useState<Diary | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [projectError, setProjectError] = useState("");
@@ -176,17 +188,19 @@ function App() {
       setHomeProgressOverview(null);
       setHomeIssueSummary(null);
       setHomeDiarySummary(null);
+      setHomeDiary(null);
       return;
     }
 
     let active = true;
     const todayIso = localDateInputValue();
-    Promise.allSettled([fetchProgressOverview(projectId), fetchIssueSummary(projectId), fetchDiaryMaterialSummary(projectId, todayIso)])
-      .then(([progressResult, issueResult, diaryResult]) => {
+    Promise.allSettled([fetchProgressOverview(projectId), fetchIssueSummary(projectId), fetchDiaryMaterialSummary(projectId, todayIso), fetchDiary(projectId, todayIso)])
+      .then(([progressResult, issueResult, diaryResult, diaryStatusResult]) => {
         if (active) {
           setHomeProgressOverview(progressResult.status === "fulfilled" ? progressResult.value : null);
           setHomeIssueSummary(issueResult.status === "fulfilled" ? issueResult.value : null);
           setHomeDiarySummary(diaryResult.status === "fulfilled" ? diaryResult.value : null);
+          setHomeDiary(diaryStatusResult.status === "fulfilled" ? diaryStatusResult.value : null);
         }
       })
       .catch(() => {
@@ -194,6 +208,7 @@ function App() {
           setHomeProgressOverview(null);
           setHomeIssueSummary(null);
           setHomeDiarySummary(null);
+          setHomeDiary(null);
         }
       });
 
@@ -276,6 +291,14 @@ function App() {
         >
           <BookOpenText size={20} />
         </button>
+        <button
+          className={view.name === "settings" ? "rail-button active" : "rail-button"}
+          type="button"
+          onClick={() => navigate({ name: "settings" })}
+          title="系统设置"
+        >
+          <Settings size={20} />
+        </button>
       </aside>
 
       <section className="workspace">
@@ -287,6 +310,7 @@ function App() {
             progressOverview={homeProgressOverview}
             issueSummary={homeIssueSummary}
             diarySummary={homeDiarySummary}
+            diary={homeDiary}
             onOpenProjects={() => navigate({ name: "projects" })}
             onNewProject={() => navigate({ name: "new-project" })}
             onOpenInbox={() => navigate({ name: "smart-inbox" })}
@@ -294,6 +318,7 @@ function App() {
             onOpenQuickRecord={() => navigate({ name: "quick-record" })}
             onOpenIssues={() => navigate({ name: "issues" })}
             onOpenDiaryMaterials={() => navigate({ name: "diary-materials" })}
+            onOpenSettings={() => navigate({ name: "settings" })}
           />
         )}
         {view.name === "smart-inbox" && (
@@ -342,6 +367,7 @@ function App() {
             onNewProject={() => navigate({ name: "new-project" })}
           />
         )}
+        {view.name === "settings" && <SettingsView />}
         {view.name === "projects" && (
           <ProjectsView
             projects={projects}
@@ -383,6 +409,7 @@ interface HomeViewProps {
   progressOverview: ProgressOverview | null;
   issueSummary: IssueSummary | null;
   diarySummary: DiaryMaterialSummary | null;
+  diary: Diary | null;
   onOpenProjects: () => void;
   onNewProject: () => void;
   onOpenInbox: () => void;
@@ -390,6 +417,7 @@ interface HomeViewProps {
   onOpenQuickRecord: () => void;
   onOpenIssues: () => void;
   onOpenDiaryMaterials: () => void;
+  onOpenSettings: () => void;
 }
 
 function HomeView({
@@ -399,6 +427,7 @@ function HomeView({
   progressOverview,
   issueSummary,
   diarySummary,
+  diary,
   onOpenProjects,
   onNewProject,
   onOpenInbox,
@@ -406,6 +435,7 @@ function HomeView({
   onOpenQuickRecord,
   onOpenIssues,
   onOpenDiaryMaterials,
+  onOpenSettings,
 }: HomeViewProps) {
   const activeCount = projects.filter((project) => project.status === "active").length;
   const pendingItems = inboxItems.filter((item) => item.status === "pending");
@@ -413,6 +443,8 @@ function HomeView({
     ? "无法计算"
     : formatPercent(progressOverview?.overall_actual_percent);
   const progressHint = progressOverview?.latest_data_date ? `最新数据 ${progressOverview.latest_data_date}` : "暂无已发布进度";
+  const diaryStatus = diary ? (diary.confirmed ? "已确认" : "已生成未确认") : "未生成";
+  const diaryStatusClass = diary ? (diary.confirmed ? "used" : "draft") : "";
 
   return (
     <div className="home-grid">
@@ -420,10 +452,10 @@ function HomeView({
         <div className="hero-copy">
           <div className="eyebrow">
             <Sparkles size={16} />
-            阶段 7 日志素材池
+            阶段 8 监理日志一键生成
           </div>
           <h1>智能工程监理工作台</h1>
-          <p>自动汇总进度发布、现场巡视、问题记录和整改复查素材，为下一阶段监理日志生成准备可追溯内容。</p>
+          <p>从今日日志素材池生成监理日志草稿，支持 AI 配置，也能在 AI 不可用时使用内置模板兜底，最终由监理人员编辑确认。</p>
           <div className="hero-actions">
             <button className="primary-button" type="button" onClick={onOpenInbox}>
               <UploadCloud size={18} />
@@ -447,7 +479,11 @@ function HomeView({
             </button>
             <button className="ghost-button" type="button" onClick={onOpenDiaryMaterials}>
               <BookOpenText size={18} />
-              日志素材
+              一键生成日志
+            </button>
+            <button className="ghost-button" type="button" onClick={onOpenSettings}>
+              <Settings size={18} />
+              AI 设置
             </button>
           </div>
         </div>
@@ -561,6 +597,24 @@ function HomeView({
         <div className="panel-title">
           <BookOpenText size={20} />
           <div>
+            <h2>今日监理日志状态</h2>
+            <span>{diaryStatus}</span>
+          </div>
+        </div>
+        <button className="diary-summary-card diary-status-card" type="button" onClick={onOpenDiaryMaterials}>
+          <span>状态 <strong className={diaryStatusClass}>{diaryStatus}</strong></span>
+          <span>素材 <strong>{diarySummary?.total_count ?? 0}</strong></span>
+          <span>进度 <strong>{diarySummary?.progress_count ?? 0}</strong></span>
+          <span>问题 <strong>{diarySummary?.issue_count ?? 0}</strong></span>
+          <span>复查 <strong>{diarySummary?.review_count ?? 0}</strong></span>
+          <span>未使用 <strong>{diarySummary?.unused_count ?? 0}</strong></span>
+        </button>
+      </section>
+
+      <section className="panel diary-summary-panel">
+        <div className="panel-title">
+          <ClipboardList size={20} />
+          <div>
             <h2>今日日志素材</h2>
             <span>{diarySummary ? `已收集 ${diarySummary.total_count} 条` : "暂无素材统计"}</span>
           </div>
@@ -584,10 +638,13 @@ function HomeView({
           <Sparkles size={20} />
           <div>
             <h2>AI 智能建议</h2>
-            <span>未启用 AI 调用</span>
+            <span>日志生成可配置 OpenAI 兼容接口</span>
           </div>
         </div>
-        <EmptyLine text="本阶段不接入 AI，仅保留建议位。" />
+        <button className="input-placeholder inbox-entry" type="button" onClick={onOpenSettings}>
+          <Settings size={28} />
+          <span>配置 Base URL、API Key 和 Model；AI 不可用时系统会自动使用内置日志模板。</span>
+        </button>
       </section>
 
       <section className="status-grid">
@@ -1627,16 +1684,62 @@ function IssueDetailPanel({
   );
 }
 
+const emptyDiaryDraft: DiaryDraft = {
+  construction_summary: "",
+  workers_summary: "",
+  machinery_summary: "",
+  quality_summary: "",
+  safety_summary: "",
+  patrol_summary: "",
+  issue_summary: "",
+  handling_opinion: "",
+  tomorrow_plan: "",
+};
+
+const diaryDraftFields: Array<{ key: keyof DiaryDraft; label: string; hint: string }> = [
+  { key: "construction_summary", label: "今日施工情况", hint: "进度、施工内容、主要完成事项" },
+  { key: "workers_summary", label: "施工人员情况", hint: "人员投入、班组情况" },
+  { key: "machinery_summary", label: "施工机械情况", hint: "机械设备、运行情况" },
+  { key: "quality_summary", label: "质量检查情况", hint: "质量检查、验收、质量问题" },
+  { key: "safety_summary", label: "安全检查情况", hint: "安全巡查、隐患、文明施工" },
+  { key: "patrol_summary", label: "巡视检查情况", hint: "巡视记录和现场检查摘要" },
+  { key: "issue_summary", label: "存在问题", hint: "质量、安全、进度、资料问题" },
+  { key: "handling_opinion", label: "处理意见", hint: "整改要求、回复、复查意见" },
+  { key: "tomorrow_plan", label: "明日重点", hint: "下一日监理关注点" },
+];
+
+function draftFromDiary(diary: Diary): DiaryDraft {
+  return {
+    construction_summary: diary.construction_summary ?? "",
+    workers_summary: diary.workers_summary ?? "",
+    machinery_summary: diary.machinery_summary ?? "",
+    quality_summary: diary.quality_summary ?? "",
+    safety_summary: diary.safety_summary ?? "",
+    patrol_summary: diary.patrol_summary ?? "",
+    issue_summary: diary.issue_summary ?? "",
+    handling_opinion: diary.handling_opinion ?? "",
+    tomorrow_plan: diary.tomorrow_plan ?? "",
+  };
+}
+
 function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; onNewProject: () => void }) {
   const [selectedProjectId, setSelectedProjectId] = useState<number | "">(projects[0]?.id ?? "");
   const [materialDate, setMaterialDate] = useState(localDateInputValue());
   const [materials, setMaterials] = useState<DiaryMaterial[]>([]);
   const [summary, setSummary] = useState<DiaryMaterialSummary | null>(null);
+  const [existingDiary, setExistingDiary] = useState<Diary | null>(null);
   const [manualContent, setManualContent] = useState("");
+  const [weather, setWeather] = useState("");
+  const [temperature, setTemperature] = useState("");
+  const [manualNote, setManualNote] = useState("");
+  const [draft, setDraft] = useState<DiaryDraft>(emptyDiaryDraft);
+  const [aiGenerationId, setAiGenerationId] = useState<number | null>(null);
+  const [usedAi, setUsedAi] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
   const [editingContent, setEditingContent] = useState("");
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState(false);
+  const [generating, setGenerating] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -1653,16 +1756,28 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
     setLoading(true);
     setError("");
     try {
-      const [materialItems, materialSummary] = await Promise.all([
+      const [materialItems, materialSummary, diaryDetail] = await Promise.all([
         fetchDiaryMaterials(Number(selectedProjectId), materialDate),
         fetchDiaryMaterialSummary(Number(selectedProjectId), materialDate),
+        fetchDiary(Number(selectedProjectId), materialDate),
       ]);
       setMaterials(materialItems);
       setSummary(materialSummary);
+      setExistingDiary(diaryDetail);
+      if (diaryDetail) {
+        setDraft(draftFromDiary(diaryDetail));
+        setWeather(diaryDetail.weather ?? "");
+        setTemperature(diaryDetail.temperature ?? "");
+      } else {
+        setDraft(emptyDiaryDraft);
+        setAiGenerationId(null);
+        setUsedAi(false);
+      }
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "日志素材加载失败");
       setMaterials([]);
       setSummary(null);
+      setExistingDiary(null);
     } finally {
       setLoading(false);
     }
@@ -1670,6 +1785,12 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
 
   useEffect(() => {
     void loadMaterials();
+  }, [selectedProjectId, materialDate]);
+
+  useEffect(() => {
+    setAiGenerationId(null);
+    setUsedAi(false);
+    setManualNote("");
   }, [selectedProjectId, materialDate]);
 
   async function handleCreateManual() {
@@ -1767,14 +1888,75 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
     }
   }
 
+  async function handleGenerateDiary() {
+    if (!selectedProjectId) {
+      setError("请先选择项目。");
+      return;
+    }
+    setGenerating(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await generateDiary({
+        project_id: Number(selectedProjectId),
+        diary_date: materialDate,
+        weather,
+        temperature,
+        manual_note: manualNote,
+      });
+      setDraft(result.draft);
+      setAiGenerationId(result.ai_generation_id);
+      setUsedAi(result.used_ai);
+      setMessage(result.used_ai ? "AI 已生成监理日志草稿，请编辑确认。" : "AI 未使用，已根据素材池生成模板草稿。");
+      await loadMaterials();
+    } catch (generateError) {
+      setError(generateError instanceof Error ? generateError.message : "日志草稿生成失败");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleConfirmDiary() {
+    if (!selectedProjectId) {
+      setError("请先选择项目。");
+      return;
+    }
+    setWorking(true);
+    setError("");
+    setMessage("");
+    try {
+      const diary = await confirmDiary({
+        project_id: Number(selectedProjectId),
+        diary_date: materialDate,
+        weather,
+        temperature,
+        ai_generation_id: aiGenerationId,
+        draft,
+      });
+      setExistingDiary(diary);
+      setDraft(draftFromDiary(diary));
+      setMessage("监理日志已确认保存，素材已标记为已使用。");
+      await loadMaterials();
+    } catch (confirmError) {
+      setError(confirmError instanceof Error ? confirmError.message : "日志确认保存失败");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function updateDraftField(field: keyof DiaryDraft, value: string) {
+    setDraft((current) => ({ ...current, [field]: value }));
+  }
+
   const noProjects = projects.length === 0;
+  const diaryStatus = existingDiary ? (existingDiary.confirmed ? "已确认" : "已生成未确认") : "未生成";
 
   return (
     <div className="page-stack diary-page">
       <PageHeader
-        eyebrow="阶段 7"
-        title="监理日志素材池"
-        description="自动汇总今日进度、巡视记录、问题记录、整改回复和复查意见；当前阶段只管理素材，不生成正式日志。"
+        eyebrow="阶段 8"
+        title="监理日志一键生成"
+        description="基于日志素材池生成监理日志草稿，支持 AI 生成，也支持 AI 不可用时的内置模板兜底；确认后保存为正式 diary 记录。"
         action={
           noProjects ? (
             <button className="primary-button" type="button" onClick={onNewProject}>
@@ -1820,9 +2002,74 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
               <MetricCard title="巡视素材" value={String(summary.patrol_count)} hint="一句话记录写入" tone="cyan" />
               <MetricCard title="问题素材" value={String(summary.issue_count)} hint="问题创建自动生成" tone="violet" />
               <MetricCard title="复查素材" value={String(summary.review_count)} hint="回复/复查/关闭" tone="green" />
-              <MetricCard title="人工补充" value={String(summary.manual_count)} hint={`已使用 ${summary.used_count}`} tone="cyan" />
+              <MetricCard title="日志状态" value={diaryStatus} hint={`素材已使用 ${summary.used_count}`} tone={existingDiary?.confirmed ? "green" : "cyan"} />
             </section>
           )}
+
+          <section className={generating ? "diary-generate-console is-generating" : "diary-generate-console"}>
+            <div className="panel-title">
+              <Sparkles size={20} />
+              <div>
+                <h2>一键生成日志草稿</h2>
+                <span>{usedAi ? "本次草稿来自 AI 生成" : "AI 不可用时自动使用内置模板"}</span>
+              </div>
+            </div>
+            <div className="diary-generate-grid">
+              <label className="field compact-field" htmlFor="diary-weather">
+                <span>天气</span>
+                <input id="diary-weather" value={weather} onChange={(event) => setWeather(event.target.value)} placeholder="晴" />
+              </label>
+              <label className="field compact-field" htmlFor="diary-temperature">
+                <span>温度</span>
+                <input id="diary-temperature" value={temperature} onChange={(event) => setTemperature(event.target.value)} placeholder="25-32℃" />
+              </label>
+              <label className="field compact-field diary-manual-note-field" htmlFor="diary-manual-note">
+                <span>人工补充</span>
+                <textarea
+                  id="diary-manual-note"
+                  value={manualNote}
+                  onChange={(event) => setManualNote(event.target.value)}
+                  placeholder="补充当天整体施工情况、特殊事项或明日重点。"
+                />
+              </label>
+            </div>
+            <div className="diary-generate-actions">
+              <button className="primary-button" type="button" disabled={generating || working} onClick={() => void handleGenerateDiary()}>
+                <Sparkles size={18} />
+                {generating ? "生成中..." : "一键生成"}
+              </button>
+              <button className="ghost-button" type="button" onClick={() => setMessage("Word 正式导出将在阶段 9 实现，当前仅保留入口占位。")}>
+                <Download size={18} />
+                导出 Word
+              </button>
+            </div>
+          </section>
+
+          <section className="panel diary-draft-panel">
+            <div className="list-toolbar">
+              <span>日志草稿编辑区</span>
+              <span className={existingDiary?.confirmed ? "used-flag used" : "used-flag"}>{diaryStatus}</span>
+            </div>
+            <div className="diary-draft-grid">
+              {diaryDraftFields.map((field) => (
+                <label className="diary-draft-field" key={field.key} htmlFor={`draft-${field.key}`}>
+                  <span>{field.label}</span>
+                  <small>{field.hint}</small>
+                  <textarea
+                    id={`draft-${field.key}`}
+                    value={draft[field.key]}
+                    onChange={(event) => updateDraftField(field.key, event.target.value)}
+                  />
+                </label>
+              ))}
+            </div>
+            <div className="form-actions">
+              <button className="primary-button" type="button" disabled={working || generating} onClick={() => void handleConfirmDiary()}>
+                <Save size={18} />
+                {existingDiary?.confirmed ? "更新确认日志" : "确认保存日志"}
+              </button>
+            </div>
+          </section>
 
           <section className="diary-workbench">
             <section className="panel diary-manual-panel">
@@ -1905,6 +2152,146 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+function SettingsView() {
+  const [settings, setSettings] = useState<AISettings | null>(null);
+  const [form, setForm] = useState({ base_url: "", api_key: "", model: "" });
+  const [loading, setLoading] = useState(true);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  async function loadSettings() {
+    setLoading(true);
+    setError("");
+    try {
+      const data = await fetchAISettings();
+      setSettings(data);
+      setForm({ base_url: data.base_url, api_key: data.api_key, model: data.model });
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "AI 配置加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadSettings();
+  }, []);
+
+  async function handleSaveSettings(event: FormEvent) {
+    event.preventDefault();
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const saved = await saveAISettings(form);
+      setSettings(saved);
+      setForm({ base_url: saved.base_url, api_key: saved.api_key, model: saved.model });
+      setMessage("AI 配置已保存，API Key 已脱敏显示。");
+    } catch (saveError) {
+      setError(saveError instanceof Error ? saveError.message : "AI 配置保存失败");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="page-stack settings-page">
+      <PageHeader
+        eyebrow="阶段 8"
+        title="系统设置"
+        description="配置 OpenAI 兼容接口用于监理日志草稿生成；API Key 仅本地保存，前端读取时始终脱敏显示。"
+        action={
+          <button className="icon-text-button" type="button" onClick={() => void loadSettings()}>
+            <Activity size={17} />
+            刷新
+          </button>
+        }
+      />
+
+      <section className="settings-grid">
+        <form className="panel settings-form" onSubmit={handleSaveSettings}>
+          <div className="panel-title">
+            <Settings size={20} />
+            <div>
+              <h2>AI 配置</h2>
+              <span>{settings?.configured ? "已配置，可尝试 AI 生成日志草稿" : "未配置时自动使用内置模板生成日志草稿"}</span>
+            </div>
+          </div>
+          <label className="field" htmlFor="ai-base-url">
+            <span>Base URL</span>
+            <input
+              id="ai-base-url"
+              value={form.base_url}
+              onChange={(event) => setForm((current) => ({ ...current, base_url: event.target.value }))}
+              placeholder="https://api.openai.com/v1"
+            />
+          </label>
+          <label className="field" htmlFor="ai-api-key">
+            <span>API Key</span>
+            <input
+              id="ai-api-key"
+              value={form.api_key}
+              onChange={(event) => setForm((current) => ({ ...current, api_key: event.target.value }))}
+              placeholder="保存后将脱敏显示"
+              type="password"
+            />
+          </label>
+          <label className="field" htmlFor="ai-model">
+            <span>Model</span>
+            <input
+              id="ai-model"
+              value={form.model}
+              onChange={(event) => setForm((current) => ({ ...current, model: event.target.value }))}
+              placeholder="gpt-4.1-mini"
+            />
+          </label>
+          <div className="settings-actions">
+            <button className="primary-button" type="submit" disabled={saving || loading}>
+              <Save size={18} />
+              {saving ? "保存中..." : "保存配置"}
+            </button>
+            <button
+              className="ghost-button"
+              type="button"
+              onClick={() => setMessage(settings?.configured ? "测试连接入口已预留；本阶段不强制发起外部 AI 请求。" : "请先保存完整 AI 配置。")}
+            >
+              <Sparkles size={18} />
+              测试连接
+            </button>
+          </div>
+          {error && <div className="error-banner">{error}</div>}
+          {message && <div className="success-banner">{message}</div>}
+        </form>
+
+        <section className="panel settings-note-panel">
+          <div className="panel-title">
+            <ShieldCheck size={20} />
+            <div>
+              <h2>安全说明</h2>
+              <span>日志生成失败时不影响核心业务</span>
+            </div>
+          </div>
+          <div className="settings-note-list">
+            <div>
+              <strong>API Key 脱敏</strong>
+              <span>读取配置时只显示掩码，不在日志或页面输出完整密钥。</span>
+            </div>
+            <div>
+              <strong>失败兜底</strong>
+              <span>未配置或调用失败时，系统按素材分类拼接生成基础草稿。</span>
+            </div>
+            <div>
+              <strong>人工确认</strong>
+              <span>AI 或模板只生成草稿，确认后才保存为正式监理日志。</span>
+            </div>
+          </div>
+        </section>
+      </section>
     </div>
   );
 }

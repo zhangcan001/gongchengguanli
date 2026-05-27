@@ -133,6 +133,8 @@ def project_has_related_data(connection: sqlite3.Connection, project_id: int) ->
         "patrol_record",
         "issue",
         "diary_material",
+        "diary",
+        "ai_generation",
     )
     for table_name in related_tables:
         row = connection.execute(

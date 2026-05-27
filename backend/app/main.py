@@ -11,6 +11,12 @@ from .config import Settings, get_settings
 from .database import get_connection, initialize_database
 from .errors import ErrorCode
 from .models import (
+    AISettings,
+    AISettingsUpdate,
+    Diary,
+    DiaryConfirmRequest,
+    DiaryGenerateRequest,
+    DiaryGenerateResponse,
     DiaryMaterial,
     DiaryMaterialCreate,
     DiaryMaterialSummaryResponse,
@@ -45,6 +51,8 @@ from .models import (
     SmartInboxItem,
     SmartInboxUploadResponse,
 )
+from .ai_service import AIService
+from .diary import DiaryService
 from .diary_materials import DiaryMaterialService
 from .issues import IssueService
 from .progress_analytics import ProgressAnalyticsService
@@ -124,6 +132,10 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": error.code, "message": error.message})
         if error.code == ErrorCode.DIARY_MATERIAL_CANNOT_DELETE:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.DIARY_NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.AI_SETTINGS_INVALID:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": error.code, "message": error.message})
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"code": "UNKNOWN_ERROR", "message": "Unknown error."})
 
     @app.get("/api/health", response_model=HealthResponse)
@@ -279,6 +291,20 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except RepositoryError as error:
             handle_repository_error(error)
 
+    @app.get("/api/settings/ai", response_model=AISettings)
+    def api_get_ai_settings(connection: sqlite3.Connection = Depends(get_db)) -> dict:
+        return AIService(connection).get_settings(masked=True)
+
+    @app.put("/api/settings/ai", response_model=AISettings)
+    def api_save_ai_settings(
+        payload: AISettingsUpdate,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return AIService(connection).save_settings(payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
     @app.get("/api/issues/summary", response_model=IssueSummaryResponse)
     def api_issue_summary(
         project_id: int | None = Query(default=None),
@@ -360,6 +386,47 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         try:
             return DiaryMaterialService(connection).mark_used(material_id, used=False)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/diary/generate", response_model=DiaryGenerateResponse)
+    async def api_generate_diary(
+        payload: DiaryGenerateRequest,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return await DiaryService(connection).generate(payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/diary/confirm", response_model=Diary)
+    def api_confirm_diary(
+        payload: DiaryConfirmRequest,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return DiaryService(connection).confirm(payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/diary/list", response_model=list[Diary])
+    def api_list_diaries(
+        project_id: int = Query(...),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> list[dict]:
+        try:
+            return DiaryService(connection).list_diaries(project_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/diary", response_model=Diary | None)
+    def api_get_diary(
+        project_id: int = Query(...),
+        diary_date: date = Query(..., alias="date"),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict | None:
+        try:
+            return DiaryService(connection).get_diary(project_id, diary_date)
         except RepositoryError as error:
             handle_repository_error(error)
 
