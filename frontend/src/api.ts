@@ -1,4 +1,8 @@
 import type {
+  DiaryMaterial,
+  DiaryMaterialInput,
+  DiaryMaterialSummary,
+  DiaryMaterialUpdateInput,
   FieldMapping,
   Issue,
   IssueAction,
@@ -233,6 +237,46 @@ export async function fetchIssueArchiveCheck(issueId: number): Promise<IssueArch
 export async function fetchIssueSummary(projectId?: number): Promise<IssueSummary> {
   const query = projectId ? `?project_id=${projectId}` : "";
   return request<IssueSummary>(`/api/issues/summary${query}`);
+}
+
+export async function fetchDiaryMaterials(projectId: number, materialDate: string): Promise<DiaryMaterial[]> {
+  return request<DiaryMaterial[]>(`/api/diary/materials?project_id=${projectId}&date=${encodeURIComponent(materialDate)}`);
+}
+
+export async function createDiaryMaterial(payload: DiaryMaterialInput): Promise<DiaryMaterial> {
+  return request<DiaryMaterial>("/api/diary/materials", {
+    method: "POST",
+    body: JSON.stringify(normalizeObject(payload)),
+  });
+}
+
+export async function updateDiaryMaterial(materialId: number, payload: DiaryMaterialUpdateInput): Promise<DiaryMaterial> {
+  return request<DiaryMaterial>(`/api/diary/materials/${materialId}`, {
+    method: "PUT",
+    body: JSON.stringify(normalizeObject(payload)),
+  });
+}
+
+export async function deleteDiaryMaterial(materialId: number): Promise<void> {
+  await request<void>(`/api/diary/materials/${materialId}`, {
+    method: "DELETE",
+  });
+}
+
+export async function markDiaryMaterialUsed(materialId: number): Promise<DiaryMaterial> {
+  return request<DiaryMaterial>(`/api/diary/materials/${materialId}/mark-used`, {
+    method: "POST",
+  });
+}
+
+export async function markDiaryMaterialUnused(materialId: number): Promise<DiaryMaterial> {
+  return request<DiaryMaterial>(`/api/diary/materials/${materialId}/mark-unused`, {
+    method: "POST",
+  });
+}
+
+export async function fetchDiaryMaterialSummary(projectId: number, materialDate: string): Promise<DiaryMaterialSummary> {
+  return request<DiaryMaterialSummary>(`/api/diary/materials/summary?project_id=${projectId}&date=${encodeURIComponent(materialDate)}`);
 }
 
 function issueAction(path: string, payload: IssueActionPayload): Promise<Issue> {

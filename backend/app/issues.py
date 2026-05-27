@@ -2,6 +2,7 @@ import sqlite3
 from datetime import date
 from typing import Any
 
+from .diary_materials import create_diary_material
 from .errors import ErrorCode
 from .models import (
     IssueActionInput,
@@ -81,6 +82,7 @@ ISSUE_WRITE_COLUMNS = (
 )
 
 ACTION_COLUMNS = ("id", "issue_id", "action_type", "content", "operator", "action_date", "created_at")
+DIARY_ACTION_TYPES = {"reply", "review", "close"}
 
 
 def _ensure_project_exists(connection: sqlite3.Connection, project_id: int) -> None:
@@ -161,6 +163,24 @@ def _insert_action(
         (issue_id, action_type, content, operator, (action_date or date.today()).isoformat()),
     )
     return int(cursor.lastrowid)
+
+
+def _issue_location(issue: sqlite3.Row | dict[str, Any]) -> str:
+    return "".join(str(issue[key]) for key in ("building", "floor", "area") if issue[key])
+
+
+def _issue_diary_content(issue: sqlite3.Row | dict[str, Any]) -> str:
+    location = _issue_location(issue)
+    prefix = f"{location}发现" if location else "发现"
+    requirement = issue["rectification_requirement"] or "已提出整改要求"
+    return f"{prefix}{issue['title']}，责任单位：{issue['responsible_unit'] or '未填写'}，整改要求：{requirement}。"
+
+
+def _action_diary_content(issue: sqlite3.Row | dict[str, Any], *, action_type: str, content: str | None, operator: str | None) -> str:
+    action_label = {"reply": "整改回复", "review": "复查意见", "close": "关闭复查"}.get(action_type, action_type)
+    location = _issue_location(issue) or "现场问题"
+    actor = operator or "未记录操作人"
+    return f"{location}{issue['title']}已登记{action_label}，操作人：{actor}，内容：{content or '无'}。"
 
 
 def _update_status(connection: sqlite3.Connection, issue_id: int, status: str, *, closed: bool = False) -> None:
@@ -279,6 +299,15 @@ class IssueService:
                 operator=payload.discovered_by,
                 action_date=data["discovered_date"],
             )
+            issue_row = _get_issue_row(self.connection, issue_id)
+            create_diary_material(
+                self.connection,
+                project_id=payload.project_id,
+                material_date=data["discovered_date"],
+                source_type="issue",
+                source_id=issue_id,
+                content=_issue_diary_content(issue_row),
+            )
             self.connection.commit()
         except Exception:
             self.connection.rollback()
@@ -323,7 +352,7 @@ class IssueService:
         issue = _get_issue_row(self.connection, issue_id)
         _require_transition(issue["status"], {"pending_rectification", "notified", "reopened", "overdue"}, "replied")
         target_status = "pending_review" if payload.mark_pending_review else "replied"
-        _insert_action(
+        action_id = _insert_action(
             self.connection,
             issue_id=issue_id,
             action_type="reply",
@@ -331,6 +360,7 @@ class IssueService:
             operator=payload.operator,
             action_date=payload.action_date,
         )
+        self._insert_issue_action_material(issue, action_id, "reply", payload)
         _update_status(self.connection, issue_id, target_status)
         self.connection.commit()
         return self.get_issue(issue_id)
@@ -338,7 +368,7 @@ class IssueService:
     def review_issue(self, issue_id: int, payload: IssueReviewRequest) -> dict[str, Any]:
         issue = _get_issue_row(self.connection, issue_id)
         _require_transition(issue["status"], {"replied", "pending_review", "rejected"}, "pending_review")
-        _insert_action(
+        action_id = _insert_action(
             self.connection,
             issue_id=issue_id,
             action_type="review",
@@ -346,15 +376,16 @@ class IssueService:
             operator=payload.operator,
             action_date=payload.action_date,
         )
+        self._insert_issue_action_material(issue, action_id, "review", payload)
         _update_status(self.connection, issue_id, "closed" if payload.close_issue else "pending_review", closed=payload.close_issue)
         self.connection.commit()
         return self.get_issue(issue_id)
 
     def close_issue(self, issue_id: int, payload: IssueCloseRequest) -> dict[str, Any]:
-        _get_issue_row(self.connection, issue_id)
+        issue = _get_issue_row(self.connection, issue_id)
         if not payload.content.strip():
             raise RepositoryError(ErrorCode.ISSUE_REVIEW_REQUIRED, "Review opinion is required before closing issue.")
-        _insert_action(
+        review_action_id = _insert_action(
             self.connection,
             issue_id=issue_id,
             action_type="review",
@@ -362,7 +393,8 @@ class IssueService:
             operator=payload.operator,
             action_date=payload.action_date,
         )
-        _insert_action(
+        self._insert_issue_action_material(issue, review_action_id, "review", payload)
+        close_action_id = _insert_action(
             self.connection,
             issue_id=issue_id,
             action_type="close",
@@ -370,6 +402,7 @@ class IssueService:
             operator=payload.operator,
             action_date=payload.action_date,
         )
+        self._insert_issue_action_material(issue, close_action_id, "close", payload)
         _update_status(self.connection, issue_id, "closed", closed=True)
         self.connection.commit()
         item = self.get_issue(issue_id)
@@ -434,6 +467,24 @@ class IssueService:
             label = item.get(field) or empty_label
             counts[label] = counts.get(label, 0) + 1
         return [{"label": label, "count": count} for label, count in sorted(counts.items(), key=lambda pair: (-pair[1], pair[0]))]
+
+    def _insert_issue_action_material(
+        self,
+        issue: sqlite3.Row,
+        action_id: int,
+        action_type: str,
+        payload: IssueActionInput,
+    ) -> None:
+        if action_type not in DIARY_ACTION_TYPES:
+            return
+        create_diary_material(
+            self.connection,
+            project_id=issue["project_id"],
+            material_date=payload.action_date or date.today(),
+            source_type="issue_action",
+            source_id=action_id,
+            content=_action_diary_content(issue, action_type=action_type, content=payload.content, operator=payload.operator),
+        )
 
 
 def list_issue_actions(connection: sqlite3.Connection, issue_id: int) -> list[dict[str, Any]]:

@@ -5,6 +5,7 @@ from datetime import date
 from typing import Any
 
 from .errors import ErrorCode
+from .diary_materials import create_diary_material
 from .issues import record_issue_action
 from .models import QuickRecordAnalyzeRequest, QuickRecordConfirmRequest
 from .repositories import RepositoryError
@@ -257,10 +258,11 @@ class QuickRecordService:
                     )
 
             if "write_diary_material" in actions:
-                diary_material_id = self._insert_diary_material(
+                diary_material_id = create_diary_material(
+                    self.connection,
                     project_id=payload.project_id,
                     material_date=material_date,
-                    source_type="patrol" if patrol_record_id is not None else "quick_record",
+                    source_type="patrol" if patrol_record_id is not None else "manual",
                     source_id=patrol_record_id or issue_id,
                     content=diary_content,
                 )
@@ -409,23 +411,5 @@ class QuickRecordService:
                 issue_id,
                 1 if write_to_diary else 0,
             ),
-        )
-        return int(cursor.lastrowid)
-
-    def _insert_diary_material(
-        self,
-        *,
-        project_id: int,
-        material_date: date,
-        source_type: str,
-        source_id: int | None,
-        content: str,
-    ) -> int:
-        cursor = self.connection.execute(
-            """
-            INSERT INTO diary_material (project_id, material_date, source_type, source_id, content)
-            VALUES (?, ?, ?, ?, ?)
-            """,
-            (project_id, material_date.isoformat(), source_type, source_id, content),
         )
         return int(cursor.lastrowid)

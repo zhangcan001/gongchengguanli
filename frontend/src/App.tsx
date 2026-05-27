@@ -9,6 +9,8 @@ import {
   ChevronRight,
   ClipboardList,
   ClipboardCheck,
+  BookOpenText,
+  Edit3,
   FileUp,
   FileText,
   Gauge,
@@ -33,9 +35,13 @@ import {
   analyzeProgressImport,
   closeIssue,
   confirmQuickRecord,
+  createDiaryMaterial,
   createIssue,
   createProject,
+  deleteDiaryMaterial,
   deleteProject,
+  fetchDiaryMaterials,
+  fetchDiaryMaterialSummary,
   fetchIssue,
   fetchIssueArchiveCheck,
   fetchIssues,
@@ -47,6 +53,8 @@ import {
   fetchProgressDelayAnalysis,
   fetchProgressOverview,
   fetchSmartInbox,
+  markDiaryMaterialUnused,
+  markDiaryMaterialUsed,
   notifyIssue,
   publishProgressImport,
   reopenIssue,
@@ -54,8 +62,11 @@ import {
   reviewIssue,
   uploadSmartInboxFile,
   validateProgressImport,
+  updateDiaryMaterial,
 } from "./api";
 import type {
+  DiaryMaterial,
+  DiaryMaterialSummary,
   FieldMapping,
   Issue,
   IssueActionPayload,
@@ -84,6 +95,7 @@ type View =
   | { name: "progress-dashboard" }
   | { name: "quick-record" }
   | { name: "issues" }
+  | { name: "diary-materials" }
   | { name: "new-project" }
   | { name: "project-detail"; projectId: number };
 
@@ -112,6 +124,7 @@ function App() {
   const [inboxItems, setInboxItems] = useState<SmartInboxItem[]>([]);
   const [homeProgressOverview, setHomeProgressOverview] = useState<ProgressOverview | null>(null);
   const [homeIssueSummary, setHomeIssueSummary] = useState<IssueSummary | null>(null);
+  const [homeDiarySummary, setHomeDiarySummary] = useState<DiaryMaterialSummary | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [projectError, setProjectError] = useState("");
@@ -162,21 +175,25 @@ function App() {
     if (!projectId) {
       setHomeProgressOverview(null);
       setHomeIssueSummary(null);
+      setHomeDiarySummary(null);
       return;
     }
 
     let active = true;
-    Promise.allSettled([fetchProgressOverview(projectId), fetchIssueSummary(projectId)])
-      .then(([progressResult, issueResult]) => {
+    const todayIso = localDateInputValue();
+    Promise.allSettled([fetchProgressOverview(projectId), fetchIssueSummary(projectId), fetchDiaryMaterialSummary(projectId, todayIso)])
+      .then(([progressResult, issueResult, diaryResult]) => {
         if (active) {
           setHomeProgressOverview(progressResult.status === "fulfilled" ? progressResult.value : null);
           setHomeIssueSummary(issueResult.status === "fulfilled" ? issueResult.value : null);
+          setHomeDiarySummary(diaryResult.status === "fulfilled" ? diaryResult.value : null);
         }
       })
       .catch(() => {
         if (active) {
           setHomeProgressOverview(null);
           setHomeIssueSummary(null);
+          setHomeDiarySummary(null);
         }
       });
 
@@ -251,6 +268,14 @@ function App() {
         >
           <ClipboardCheck size={20} />
         </button>
+        <button
+          className={view.name === "diary-materials" ? "rail-button active" : "rail-button"}
+          type="button"
+          onClick={() => navigate({ name: "diary-materials" })}
+          title="监理日志"
+        >
+          <BookOpenText size={20} />
+        </button>
       </aside>
 
       <section className="workspace">
@@ -261,12 +286,14 @@ function App() {
             inboxItems={inboxItems}
             progressOverview={homeProgressOverview}
             issueSummary={homeIssueSummary}
+            diarySummary={homeDiarySummary}
             onOpenProjects={() => navigate({ name: "projects" })}
             onNewProject={() => navigate({ name: "new-project" })}
             onOpenInbox={() => navigate({ name: "smart-inbox" })}
             onOpenProgressDashboard={() => navigate({ name: "progress-dashboard" })}
             onOpenQuickRecord={() => navigate({ name: "quick-record" })}
             onOpenIssues={() => navigate({ name: "issues" })}
+            onOpenDiaryMaterials={() => navigate({ name: "diary-materials" })}
           />
         )}
         {view.name === "smart-inbox" && (
@@ -305,6 +332,12 @@ function App() {
         )}
         {view.name === "issues" && (
           <IssuesView
+            projects={projects}
+            onNewProject={() => navigate({ name: "new-project" })}
+          />
+        )}
+        {view.name === "diary-materials" && (
+          <DiaryMaterialsView
             projects={projects}
             onNewProject={() => navigate({ name: "new-project" })}
           />
@@ -349,12 +382,14 @@ interface HomeViewProps {
   inboxItems: SmartInboxItem[];
   progressOverview: ProgressOverview | null;
   issueSummary: IssueSummary | null;
+  diarySummary: DiaryMaterialSummary | null;
   onOpenProjects: () => void;
   onNewProject: () => void;
   onOpenInbox: () => void;
   onOpenProgressDashboard: () => void;
   onOpenQuickRecord: () => void;
   onOpenIssues: () => void;
+  onOpenDiaryMaterials: () => void;
 }
 
 function HomeView({
@@ -363,12 +398,14 @@ function HomeView({
   inboxItems,
   progressOverview,
   issueSummary,
+  diarySummary,
   onOpenProjects,
   onNewProject,
   onOpenInbox,
   onOpenProgressDashboard,
   onOpenQuickRecord,
   onOpenIssues,
+  onOpenDiaryMaterials,
 }: HomeViewProps) {
   const activeCount = projects.filter((project) => project.status === "active").length;
   const pendingItems = inboxItems.filter((item) => item.status === "pending");
@@ -383,10 +420,10 @@ function HomeView({
         <div className="hero-copy">
           <div className="eyebrow">
             <Sparkles size={16} />
-            阶段 6 问题闭环
+            阶段 7 日志素材池
           </div>
           <h1>智能工程监理工作台</h1>
-          <p>统一管理质量、安全、进度和资料问题，从通知、回复、复查到关闭形成可追踪闭环。</p>
+          <p>自动汇总进度发布、现场巡视、问题记录和整改复查素材，为下一阶段监理日志生成准备可追溯内容。</p>
           <div className="hero-actions">
             <button className="primary-button" type="button" onClick={onOpenInbox}>
               <UploadCloud size={18} />
@@ -407,6 +444,10 @@ function HomeView({
             <button className="ghost-button" type="button" onClick={onOpenIssues}>
               <ClipboardCheck size={18} />
               问题闭环
+            </button>
+            <button className="ghost-button" type="button" onClick={onOpenDiaryMaterials}>
+              <BookOpenText size={18} />
+              日志素材
             </button>
           </div>
         </div>
@@ -516,6 +557,28 @@ function HomeView({
         )}
       </section>
 
+      <section className="panel diary-summary-panel">
+        <div className="panel-title">
+          <BookOpenText size={20} />
+          <div>
+            <h2>今日日志素材</h2>
+            <span>{diarySummary ? `已收集 ${diarySummary.total_count} 条` : "暂无素材统计"}</span>
+          </div>
+        </div>
+        {diarySummary ? (
+          <button className="diary-summary-card" type="button" onClick={onOpenDiaryMaterials}>
+            <span>进度 <strong>{diarySummary.progress_count}</strong></span>
+            <span>巡视 <strong>{diarySummary.patrol_count}</strong></span>
+            <span>问题 <strong>{diarySummary.issue_count}</strong></span>
+            <span>复查 <strong>{diarySummary.review_count}</strong></span>
+            <span>人工 <strong>{diarySummary.manual_count}</strong></span>
+            <span>未使用 <strong>{diarySummary.unused_count}</strong></span>
+          </button>
+        ) : (
+          <EmptyLine text="进度发布、巡视记录和问题闭环产生内容后，会在这里汇总素材数量。" />
+        )}
+      </section>
+
       <section className="panel ai-panel">
         <div className="panel-title">
           <Sparkles size={20} />
@@ -532,6 +595,13 @@ function HomeView({
         <StatusCard icon={<CheckCircle2 size={22} />} title="质量状态" value={issueSummary ? `${issueSummary.pending_rectification_count} 待改` : "待接入"} tone="cyan" />
         <StatusCard icon={<ShieldCheck size={22} />} title="安全状态" value="待接入" tone="green" />
         <StatusCard icon={<FileText size={22} />} title="资料状态" value="待接入" tone="violet" />
+        <StatusCard
+          icon={<BookOpenText size={22} />}
+          title="日志素材"
+          value={diarySummary ? `${diarySummary.total_count} 条` : "0 条"}
+          tone="cyan"
+          note="阶段 7 素材池"
+        />
       </section>
     </div>
   );
@@ -605,6 +675,18 @@ const issueActionLabels: Record<string, string> = {
   reopen: "重开",
   archive: "归档",
   reject: "驳回",
+};
+
+const diarySourceLabels: Record<string, string> = {
+  progress: "进度",
+  patrol: "巡视",
+  issue: "问题",
+  issue_action: "整改复查",
+  safety: "安全",
+  quality: "质量",
+  manual: "人工",
+  meeting: "会议",
+  personnel_machinery: "人材机",
 };
 
 const emptyIssueForm = {
@@ -1545,6 +1627,288 @@ function IssueDetailPanel({
   );
 }
 
+function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; onNewProject: () => void }) {
+  const [selectedProjectId, setSelectedProjectId] = useState<number | "">(projects[0]?.id ?? "");
+  const [materialDate, setMaterialDate] = useState(localDateInputValue());
+  const [materials, setMaterials] = useState<DiaryMaterial[]>([]);
+  const [summary, setSummary] = useState<DiaryMaterialSummary | null>(null);
+  const [manualContent, setManualContent] = useState("");
+  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingContent, setEditingContent] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!selectedProjectId && projects[0]?.id) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects, selectedProjectId]);
+
+  async function loadMaterials() {
+    if (!selectedProjectId) {
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const [materialItems, materialSummary] = await Promise.all([
+        fetchDiaryMaterials(Number(selectedProjectId), materialDate),
+        fetchDiaryMaterialSummary(Number(selectedProjectId), materialDate),
+      ]);
+      setMaterials(materialItems);
+      setSummary(materialSummary);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "日志素材加载失败");
+      setMaterials([]);
+      setSummary(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadMaterials();
+  }, [selectedProjectId, materialDate]);
+
+  async function handleCreateManual() {
+    if (!selectedProjectId) {
+      setError("请先选择项目。");
+      return;
+    }
+    if (!manualContent.trim()) {
+      setError("请填写人工素材内容。");
+      return;
+    }
+
+    setWorking(true);
+    setError("");
+    setMessage("");
+    try {
+      await createDiaryMaterial({
+        project_id: Number(selectedProjectId),
+        material_date: materialDate,
+        source_type: "manual",
+        content: manualContent.trim(),
+      });
+      setManualContent("");
+      setMessage("人工日志素材已新增。");
+      await loadMaterials();
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "新增素材失败");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function startEdit(material: DiaryMaterial) {
+    setEditingId(material.id);
+    setEditingContent(material.content);
+    setError("");
+    setMessage("");
+  }
+
+  async function handleSaveEdit(materialId: number) {
+    if (!editingContent.trim()) {
+      setError("素材内容不能为空。");
+      return;
+    }
+    setWorking(true);
+    setError("");
+    try {
+      await updateDiaryMaterial(materialId, { content: editingContent.trim() });
+      setEditingId(null);
+      setEditingContent("");
+      setMessage("素材内容已更新。");
+      await loadMaterials();
+    } catch (updateError) {
+      setError(updateError instanceof Error ? updateError.message : "更新素材失败");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleDelete(materialId: number) {
+    if (!window.confirm("确定删除这条日志素材吗？")) {
+      return;
+    }
+    setWorking(true);
+    setError("");
+    setMessage("");
+    try {
+      await deleteDiaryMaterial(materialId);
+      setMessage("日志素材已删除。");
+      await loadMaterials();
+    } catch (deleteError) {
+      setError(deleteError instanceof Error ? deleteError.message : "删除素材失败");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleToggleUsed(material: DiaryMaterial) {
+    setWorking(true);
+    setError("");
+    setMessage("");
+    try {
+      if (material.used_in_diary) {
+        await markDiaryMaterialUnused(material.id);
+        setMessage("已取消使用标记。");
+      } else {
+        await markDiaryMaterialUsed(material.id);
+        setMessage("已标记为已使用。");
+      }
+      await loadMaterials();
+    } catch (toggleError) {
+      setError(toggleError instanceof Error ? toggleError.message : "素材状态更新失败");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  const noProjects = projects.length === 0;
+
+  return (
+    <div className="page-stack diary-page">
+      <PageHeader
+        eyebrow="阶段 7"
+        title="监理日志素材池"
+        description="自动汇总今日进度、巡视记录、问题记录、整改回复和复查意见；当前阶段只管理素材，不生成正式日志。"
+        action={
+          noProjects ? (
+            <button className="primary-button" type="button" onClick={onNewProject}>
+              <Plus size={18} />
+              新建项目
+            </button>
+          ) : (
+            <div className="diary-header-actions">
+              <label className="field compact-field dashboard-project-select" htmlFor="diary-project">
+                <span>当前项目</span>
+                <select
+                  id="diary-project"
+                  value={selectedProjectId}
+                  onChange={(event) => setSelectedProjectId(Number(event.target.value))}
+                >
+                  {projects.map((project) => (
+                    <option key={project.id} value={project.id}>
+                      {project.name}
+                    </option>
+                  ))}
+                </select>
+              </label>
+              <label className="field compact-field diary-date-field" htmlFor="diary-date">
+                <span>素材日期</span>
+                <input id="diary-date" type="date" value={materialDate} onChange={(event) => setMaterialDate(event.target.value)} />
+              </label>
+            </div>
+          )
+        }
+      />
+
+      {noProjects && (
+        <section className="panel">
+          <EmptyState title="暂无项目" text="先新建项目，再查看或新增日志素材。" />
+        </section>
+      )}
+
+      {!noProjects && (
+        <>
+          {summary && (
+            <section className="diary-metrics">
+              <MetricCard title="进度素材" value={String(summary.progress_count)} hint="进度发布自动生成" tone="blue" />
+              <MetricCard title="巡视素材" value={String(summary.patrol_count)} hint="一句话记录写入" tone="cyan" />
+              <MetricCard title="问题素材" value={String(summary.issue_count)} hint="问题创建自动生成" tone="violet" />
+              <MetricCard title="复查素材" value={String(summary.review_count)} hint="回复/复查/关闭" tone="green" />
+              <MetricCard title="人工补充" value={String(summary.manual_count)} hint={`已使用 ${summary.used_count}`} tone="cyan" />
+            </section>
+          )}
+
+          <section className="diary-workbench">
+            <section className="panel diary-manual-panel">
+              <div className="panel-title">
+                <Edit3 size={20} />
+                <div>
+                  <h2>手动新增素材</h2>
+                  <span>补充会议、人员机械或现场零散情况</span>
+                </div>
+              </div>
+              <textarea
+                value={manualContent}
+                onChange={(event) => setManualContent(event.target.value)}
+                placeholder="输入需要写入今日日志素材池的内容。"
+              />
+              <button className="primary-button" type="button" disabled={working} onClick={() => void handleCreateManual()}>
+                <Plus size={18} />
+                新增素材
+              </button>
+              {error && <div className="error-banner">{error}</div>}
+              {message && <div className="success-banner">{message}</div>}
+            </section>
+
+            <section className="panel diary-list-panel">
+              <div className="list-toolbar">
+                <span>{loading ? "正在加载素材..." : `共 ${materials.length} 条素材`}</span>
+                <button className="icon-text-button" type="button" onClick={() => void loadMaterials()}>
+                  <Activity size={17} />
+                  刷新
+                </button>
+              </div>
+              {materials.length === 0 && !loading ? (
+                <EmptyState title="暂无日志素材" text="进度发布、快速记录、问题闭环或手动新增后，会在这里汇总素材。" />
+              ) : (
+                <div className="diary-material-list">
+                  {materials.map((material) => (
+                    <article className={`diary-material-card source-${material.source_type}`} key={material.id}>
+                      <div className="diary-card-head">
+                        <span className={`source-tag source-${material.source_type}`}>{diarySourceLabels[material.source_type] ?? material.source_type}</span>
+                        <span className={material.used_in_diary ? "used-flag used" : "used-flag"}>{material.used_in_diary ? "已使用" : "未使用"}</span>
+                      </div>
+                      {editingId === material.id ? (
+                        <textarea value={editingContent} onChange={(event) => setEditingContent(event.target.value)} />
+                      ) : (
+                        <p>{material.content}</p>
+                      )}
+                      <div className="diary-card-meta">
+                        <span>{material.project_name ?? "未关联项目"} · {material.material_date} · #{material.id}</span>
+                        {material.source_id && <span>来源 #{material.source_id}</span>}
+                      </div>
+                      <div className="diary-card-actions">
+                        {editingId === material.id ? (
+                          <>
+                            <button className="primary-button small-action" type="button" disabled={working} onClick={() => void handleSaveEdit(material.id)}>
+                              保存
+                            </button>
+                            <button className="ghost-button small-action" type="button" disabled={working} onClick={() => setEditingId(null)}>
+                              取消
+                            </button>
+                          </>
+                        ) : (
+                          <>
+                            <button className="icon-text-button small-action" type="button" disabled={working} onClick={() => startEdit(material)}>
+                              编辑
+                            </button>
+                            <button className="icon-text-button small-action" type="button" disabled={working} onClick={() => void handleToggleUsed(material)}>
+                              {material.used_in_diary ? "标记未使用" : "标记已使用"}
+                            </button>
+                            <button className="danger-button small-action" type="button" disabled={working} onClick={() => void handleDelete(material.id)}>
+                              删除
+                            </button>
+                          </>
+                        )}
+                      </div>
+                    </article>
+                  ))}
+                </div>
+              )}
+            </section>
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
 function issueActionVerb(kind: string): string {
   return {
     notify: "通知",
@@ -1896,6 +2260,13 @@ function formatFileSize(bytes: number): string {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function localDateInputValue(value: Date = new Date()): string {
+  const year = value.getFullYear();
+  const month = String(value.getMonth() + 1).padStart(2, "0");
+  const day = String(value.getDate()).padStart(2, "0");
+  return `${year}-${month}-${day}`;
 }
 
 function formatPercent(value: number | null | undefined): string {

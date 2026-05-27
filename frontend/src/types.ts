@@ -366,3 +366,52 @@ export interface IssueSummary {
   by_type: IssueSummaryGroup[];
   by_responsible_unit: IssueSummaryGroup[];
 }
+
+export type DiaryMaterialSourceType =
+  | "progress"
+  | "patrol"
+  | "issue"
+  | "issue_action"
+  | "safety"
+  | "quality"
+  | "manual"
+  | "meeting"
+  | "personnel_machinery";
+
+export interface DiaryMaterial {
+  id: number;
+  project_id: number;
+  material_date: string;
+  source_type: DiaryMaterialSourceType | string;
+  source_id: number | null;
+  content: string;
+  used_in_diary: boolean;
+  created_at: string;
+  project_name: string | null;
+}
+
+export interface DiaryMaterialInput {
+  project_id: number;
+  material_date?: string | null;
+  source_type?: DiaryMaterialSourceType | string;
+  source_id?: number | null;
+  content: string;
+}
+
+export interface DiaryMaterialUpdateInput {
+  material_date?: string | null;
+  content?: string | null;
+}
+
+export interface DiaryMaterialSummary {
+  project_id: number;
+  material_date: string;
+  progress_count: number;
+  patrol_count: number;
+  issue_count: number;
+  review_count: number;
+  manual_count: number;
+  used_count: number;
+  unused_count: number;
+  total_count: number;
+}

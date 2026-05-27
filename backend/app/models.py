@@ -432,3 +432,41 @@ class IssueSummaryResponse(BaseModel):
     closed_count: int
     by_type: list[IssueSummaryGroup]
     by_responsible_unit: list[IssueSummaryGroup]
+
+
+class DiaryMaterial(BaseModel):
+    id: int
+    project_id: int
+    material_date: date
+    source_type: str
+    source_id: int | None = None
+    content: str
+    used_in_diary: bool
+    created_at: datetime
+    project_name: str | None = None
+
+
+class DiaryMaterialCreate(BaseModel):
+    project_id: int
+    material_date: date | None = None
+    source_type: str = Field(default="manual", max_length=40)
+    source_id: int | None = None
+    content: str = Field(..., min_length=1, max_length=4000)
+
+
+class DiaryMaterialUpdate(BaseModel):
+    material_date: date | None = None
+    content: str | None = Field(default=None, min_length=1, max_length=4000)
+
+
+class DiaryMaterialSummaryResponse(BaseModel):
+    project_id: int
+    material_date: date
+    progress_count: int
+    patrol_count: int
+    issue_count: int
+    review_count: int
+    manual_count: int
+    used_count: int
+    unused_count: int
+    total_count: int

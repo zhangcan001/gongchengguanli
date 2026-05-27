@@ -5,6 +5,7 @@ from pathlib import Path
 from typing import Any
 
 from .config import Settings
+from .diary_materials import create_diary_material
 from .errors import ErrorCode
 from .excel_analysis import (
     ExcelAnalysisService,
@@ -414,18 +415,13 @@ def publish_progress_import(
         )
         inserted += 1
 
-    connection.execute(
-        """
-        INSERT INTO diary_material (project_id, source_type, source_id, material_date, content)
-        VALUES (?, ?, ?, ?, ?)
-        """,
-        (
-            batch["project_id"],
-            "progress_import",
-            batch_id,
-            batch["data_date"],
-            f"{batch['data_date']} 导入进度数据 {inserted} 条，来源文件：{batch['file_name']}。",
-        ),
+    create_diary_material(
+        connection,
+        project_id=batch["project_id"],
+        source_type="progress",
+        source_id=batch_id,
+        material_date=date.fromisoformat(str(batch["data_date"])),
+        content=f"今日导入进度数据，数据日期为 {batch['data_date']}，共包含 {inserted} 条任务记录。",
     )
     connection.execute(
         """

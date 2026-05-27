@@ -11,6 +11,10 @@ from .config import Settings, get_settings
 from .database import get_connection, initialize_database
 from .errors import ErrorCode
 from .models import (
+    DiaryMaterial,
+    DiaryMaterialCreate,
+    DiaryMaterialSummaryResponse,
+    DiaryMaterialUpdate,
     HealthResponse,
     Issue,
     IssueAction,
@@ -41,6 +45,7 @@ from .models import (
     SmartInboxItem,
     SmartInboxUploadResponse,
 )
+from .diary_materials import DiaryMaterialService
 from .issues import IssueService
 from .progress_analytics import ProgressAnalyticsService
 from .progress_import import (
@@ -113,6 +118,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code, "message": error.message})
         if error.code == ErrorCode.ISSUE_REVIEW_REQUIRED:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.DIARY_MATERIAL_NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.INVALID_DIARY_MATERIAL_SOURCE_TYPE:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.DIARY_MATERIAL_CANNOT_DELETE:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code, "message": error.message})
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"code": "UNKNOWN_ERROR", "message": "Unknown error."})
 
     @app.get("/api/health", response_model=HealthResponse)
@@ -275,6 +286,80 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         try:
             return IssueService(connection).summary(project_id=project_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/diary/materials/summary", response_model=DiaryMaterialSummaryResponse)
+    def api_diary_material_summary(
+        project_id: int = Query(...),
+        material_date: date = Query(..., alias="date"),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return DiaryMaterialService(connection).summary(project_id=project_id, material_date=material_date)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/diary/materials", response_model=list[DiaryMaterial])
+    def api_list_diary_materials(
+        project_id: int = Query(...),
+        material_date: date = Query(..., alias="date"),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> list[dict]:
+        try:
+            return DiaryMaterialService(connection).list_materials(project_id=project_id, material_date=material_date)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/diary/materials", response_model=DiaryMaterial, status_code=status.HTTP_201_CREATED)
+    def api_create_diary_material(
+        payload: DiaryMaterialCreate,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return DiaryMaterialService(connection).create_manual_material(payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.put("/api/diary/materials/{material_id}", response_model=DiaryMaterial)
+    def api_update_diary_material(
+        material_id: int,
+        payload: DiaryMaterialUpdate,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return DiaryMaterialService(connection).update_material(material_id, payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.delete("/api/diary/materials/{material_id}", status_code=status.HTTP_204_NO_CONTENT)
+    def api_delete_diary_material(
+        material_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> Response:
+        try:
+            DiaryMaterialService(connection).delete_material(material_id)
+            return Response(status_code=status.HTTP_204_NO_CONTENT)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/diary/materials/{material_id}/mark-used", response_model=DiaryMaterial)
+    def api_mark_diary_material_used(
+        material_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return DiaryMaterialService(connection).mark_used(material_id, used=True)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/diary/materials/{material_id}/mark-unused", response_model=DiaryMaterial)
+    def api_mark_diary_material_unused(
+        material_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return DiaryMaterialService(connection).mark_used(material_id, used=False)
         except RepositoryError as error:
             handle_repository_error(error)
 

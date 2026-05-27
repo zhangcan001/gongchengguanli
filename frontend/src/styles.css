@@ -448,7 +448,7 @@ p {
 .status-grid {
   display: grid;
   grid-column: 1 / -1;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
+  grid-template-columns: repeat(5, minmax(0, 1fr));
   gap: 18px;
 }
 
@@ -551,6 +551,38 @@ p {
 }
 
 .issue-summary-card strong {
+  color: var(--text);
+  font-size: 20px;
+}
+
+.diary-summary-card {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+  border: 1px solid rgba(30, 232, 214, 0.28);
+  border-radius: 16px;
+  padding: 14px;
+  color: var(--text);
+  background:
+    linear-gradient(135deg, rgba(30, 232, 214, 0.1), rgba(43, 168, 255, 0.08)),
+    rgba(6, 21, 38, 0.72);
+  text-align: left;
+}
+
+.diary-summary-card span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid rgba(30, 232, 214, 0.16);
+  border-radius: 12px;
+  padding: 10px;
+  color: var(--muted);
+  background: rgba(3, 16, 29, 0.48);
+}
+
+.diary-summary-card strong {
   color: var(--text);
   font-size: 20px;
 }
@@ -803,6 +835,147 @@ p {
   display: grid;
   grid-template-columns: repeat(4, minmax(0, 1fr));
   gap: 16px;
+}
+
+.diary-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.diary-header-actions {
+  display: flex;
+  flex-wrap: wrap;
+  justify-content: flex-end;
+  gap: 12px;
+}
+
+.diary-date-field {
+  width: 180px;
+}
+
+.diary-workbench {
+  display: grid;
+  grid-template-columns: minmax(320px, 0.45fr) minmax(0, 1fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.diary-manual-panel,
+.diary-list-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.diary-manual-panel textarea,
+.diary-material-card textarea {
+  width: 100%;
+  min-height: 132px;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  padding: 14px;
+  color: var(--text);
+  outline: none;
+  resize: vertical;
+  background: rgba(3, 16, 29, 0.76);
+  line-height: 1.7;
+}
+
+.diary-manual-panel textarea:focus,
+.diary-material-card textarea:focus {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 3px rgba(43, 168, 255, 0.12);
+}
+
+.diary-material-list {
+  display: grid;
+  gap: 12px;
+}
+
+.diary-material-card {
+  display: grid;
+  gap: 12px;
+  border: 1px solid rgba(79, 206, 255, 0.18);
+  border-radius: 16px;
+  padding: 16px;
+  background:
+    linear-gradient(135deg, rgba(9, 29, 52, 0.86), rgba(4, 16, 30, 0.72)),
+    radial-gradient(circle at 92% 12%, rgba(43, 168, 255, 0.08), transparent 28%);
+}
+
+.diary-card-head,
+.diary-card-actions,
+.diary-card-meta {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.diary-card-head {
+  justify-content: space-between;
+}
+
+.diary-material-card p {
+  margin: 0;
+  color: #d8edf8;
+  line-height: 1.75;
+}
+
+.diary-card-meta {
+  justify-content: space-between;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.source-tag,
+.used-flag {
+  display: inline-flex;
+  min-height: 28px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  font-size: 12px;
+}
+
+.source-tag {
+  color: #dffbff;
+  background: rgba(43, 168, 255, 0.16);
+}
+
+.source-issue,
+.source-quality {
+  border-color: rgba(255, 155, 69, 0.34);
+}
+
+.source-safety {
+  border-color: rgba(255, 92, 119, 0.34);
+}
+
+.source-issue_action {
+  border-color: rgba(84, 226, 155, 0.34);
+}
+
+.source-progress {
+  border-color: rgba(43, 168, 255, 0.34);
+}
+
+.source-patrol {
+  border-color: rgba(30, 232, 214, 0.34);
+}
+
+.source-manual {
+  border-color: rgba(140, 125, 255, 0.34);
+}
+
+.used-flag {
+  color: #adc8dc;
+  background: rgba(255, 255, 255, 0.07);
+}
+
+.used-flag.used {
+  color: #d7ffea;
+  background: rgba(84, 226, 155, 0.16);
 }
 
 .issue-workbench {
@@ -1650,7 +1823,8 @@ p {
 
   .dashboard-metrics,
   .dashboard-grid,
-  .issue-metrics {
+  .issue-metrics,
+  .diary-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1661,6 +1835,7 @@ p {
   .upload-console,
   .inbox-row,
   .issue-workbench,
+  .diary-workbench,
   .quick-result-grid,
   .quick-created-list,
   .import-summary,
@@ -1695,8 +1870,11 @@ p {
     .dashboard-metrics,
     .dashboard-grid,
     .issue-metrics,
+    .diary-metrics,
     .issue-workbench,
+    .diary-workbench,
     .issue-summary-card,
+    .diary-summary-card,
     .smart-entry-grid,
     .quick-field-grid,
     .quick-result-grid,
@@ -1725,6 +1903,7 @@ p {
   .detail-head,
   .issue-detail-head,
   .issue-search,
+  .diary-header-actions,
   .quick-console-footer,
   .publish-bar {
     align-items: stretch;

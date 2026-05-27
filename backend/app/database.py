@@ -231,6 +231,8 @@ def initialize_database(settings: Settings) -> None:
         connection.execute(ISSUE_ACTION_TABLE_SQL)
         connection.execute(PATROL_RECORD_TABLE_SQL)
         connection.execute(DIARY_MATERIAL_TABLE_SQL)
+        connection.execute("UPDATE diary_material SET source_type = 'progress' WHERE source_type = 'progress_import'")
+        connection.execute("UPDATE diary_material SET source_type = 'manual' WHERE source_type = 'quick_record'")
         connection.commit()
 
 
