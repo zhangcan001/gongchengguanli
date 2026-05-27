@@ -6,8 +6,12 @@ __pycache__/
 
 node_modules/
 dist/
+release/
+build/
 *.tsbuildinfo
 
 data/
+backend/dist/
+backend/build/
 .env
 .env.*

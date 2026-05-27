@@ -30,6 +30,7 @@ import {
   Archive,
   Trash2,
   UploadCloud,
+  HardDrive,
 } from "lucide-react";
 import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
@@ -40,6 +41,7 @@ import {
   confirmDiary,
   confirmQuickRecord,
   createDiaryMaterial,
+  createDesktopBackup,
   createIssue,
   createProject,
   deleteDiaryMaterial,
@@ -48,6 +50,7 @@ import {
   fetchDiaryMaterialSummary,
   fetchAISettings,
   fetchDiary,
+  fetchDesktopStatus,
   exportDiaryWord,
   exportArchivePackage,
   exportIssueNotice,
@@ -58,6 +61,8 @@ import {
   fetchArchives,
   generateDiary,
   openArchivePath,
+  openDesktopPath,
+  resolveApiUrl,
   fetchIssue,
   fetchIssueArchiveCheck,
   fetchIssues,
@@ -81,6 +86,7 @@ import {
   validateProgressImport,
   updateDiaryMaterial,
 } from "./api";
+import type { DesktopBackupResult, DesktopStatus } from "./api";
 import type {
   AISettings,
   Diary,
@@ -1287,7 +1293,7 @@ function ArchiveView({ projects, onNewProject }: { projects: Project[]; onNewPro
                     </div>
                     <div className="archive-card-actions">
                       {item.download_url && (
-                        <a className="ghost-button small-action" href={item.download_url} target="_blank" rel="noreferrer">
+                        <a className="ghost-button small-action" href={resolveApiUrl(item.download_url)} target="_blank" rel="noreferrer">
                           <Download size={16} />
                           下载
                         </a>
@@ -1313,6 +1319,7 @@ function ArchiveView({ projects, onNewProject }: { projects: Project[]; onNewPro
 function ExportResultCard({ file }: { file: ExportFile }) {
   const directoryPath = file.file_path.split(/[\\/]/).slice(0, -1).join("/") || "data/files/exports";
   const archiveDirectory = file.archive_path?.split(/[\\/]/).slice(0, -1).join("/");
+  const downloadUrl = resolveApiUrl(file.download_url);
   return (
     <article className="export-result-card">
       <div>
@@ -1322,7 +1329,7 @@ function ExportResultCard({ file }: { file: ExportFile }) {
         {file.archive_path && <small className="archive-path-note">文件已自动归档到：{file.archive_path}</small>}
       </div>
       <div className="export-result-actions">
-        <a className="primary-button" href={file.download_url} target="_blank" rel="noreferrer">
+        <a className="primary-button" href={downloadUrl} target="_blank" rel="noreferrer">
           <Download size={18} />
           打开文件
         </a>
@@ -2645,9 +2652,12 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
 
 function SettingsView() {
   const [settings, setSettings] = useState<AISettings | null>(null);
+  const [desktopStatus, setDesktopStatus] = useState<DesktopStatus | null>(null);
+  const [backupResult, setBackupResult] = useState<DesktopBackupResult | null>(null);
   const [form, setForm] = useState({ base_url: "", api_key: "", model: "" });
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
+  const [backuping, setBackuping] = useState(false);
   const [error, setError] = useState("");
   const [message, setMessage] = useState("");
 
@@ -2667,6 +2677,7 @@ function SettingsView() {
 
   useEffect(() => {
     void loadSettings();
+    void fetchDesktopStatus().then(setDesktopStatus);
   }, []);
 
   async function handleSaveSettings(event: FormEvent) {
@@ -2683,6 +2694,28 @@ function SettingsView() {
       setError(saveError instanceof Error ? saveError.message : "AI 配置保存失败");
     } finally {
       setSaving(false);
+    }
+  }
+
+  async function handleCreateBackup() {
+    setBackuping(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await createDesktopBackup();
+      setBackupResult(result);
+      setMessage(`备份已生成：${result.backupPath}`);
+    } catch (backupError) {
+      setError(backupError instanceof Error ? backupError.message : "一键备份失败");
+    } finally {
+      setBackuping(false);
+    }
+  }
+
+  async function handleOpenPath(targetPath: string) {
+    const result = await openDesktopPath(targetPath);
+    if (!result.ok) {
+      setMessage(result.message || "当前环境暂不支持直接打开路径，请复制路径手动打开。");
     }
   }
 
@@ -2751,9 +2784,43 @@ function SettingsView() {
               测试连接
             </button>
           </div>
-          {error && <div className="error-banner">{error}</div>}
-          {message && <div className="success-banner">{message}</div>}
         </form>
+
+        <section className="panel settings-form">
+          <div className="panel-title">
+            <HardDrive size={20} />
+            <div>
+              <h2>桌面端与数据备份</h2>
+              <span>{desktopStatus ? "桌面运行状态已接入" : "浏览器开发环境仅显示预留入口"}</span>
+            </div>
+          </div>
+          <div className="desktop-status-grid">
+            <Info label="本地服务" value={desktopStatus?.backendReady ? "已启动" : desktopStatus ? "未就绪" : "非桌面环境"} />
+            <Info label="API 地址" value={desktopStatus?.apiBase ?? "随前端代理"} />
+            <Info label="数据目录" value={desktopStatus?.dataDir ?? "打包后使用应用数据目录"} />
+            <Info label="启动错误" value={desktopStatus?.backendError || "无"} />
+          </div>
+          <div className="settings-actions">
+            <button className="primary-button" type="button" disabled={backuping || !desktopStatus} onClick={() => void handleCreateBackup()}>
+              <HardDrive size={18} />
+              {backuping ? "备份中..." : "一键备份"}
+            </button>
+            <button
+              className="ghost-button"
+              type="button"
+              disabled={!desktopStatus?.dataDir}
+              onClick={() => desktopStatus?.dataDir && void handleOpenPath(desktopStatus.dataDir)}
+            >
+              打开数据目录
+            </button>
+            {backupResult && (
+              <button className="ghost-button" type="button" onClick={() => void handleOpenPath(backupResult.backupPath)}>
+                打开备份文件
+              </button>
+            )}
+          </div>
+          {backupResult && <small className="desktop-path-note">最近备份：{backupResult.backupPath}</small>}
+        </section>
 
         <section className="panel settings-note-panel">
           <div className="panel-title">
@@ -2779,6 +2846,8 @@ function SettingsView() {
           </div>
         </section>
       </section>
+      {error && <div className="error-banner">{error}</div>}
+      {message && <div className="success-banner">{message}</div>}
     </div>
   );
 }
