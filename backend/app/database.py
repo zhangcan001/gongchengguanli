@@ -130,6 +130,58 @@ CREATE TABLE IF NOT EXISTS progress_record (
 """
 
 
+ISSUE_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS issue (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    issue_type TEXT NOT NULL,
+    level TEXT NOT NULL DEFAULT 'normal',
+    title TEXT NOT NULL,
+    description TEXT NOT NULL,
+    building TEXT,
+    floor TEXT,
+    area TEXT,
+    discipline TEXT,
+    responsible_unit TEXT,
+    discovered_by TEXT,
+    discovered_date TEXT NOT NULL,
+    deadline TEXT,
+    status TEXT NOT NULL DEFAULT 'pending_rectification',
+    rectification_requirement TEXT,
+    source_type TEXT,
+    source_id INTEGER,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    closed_at TEXT,
+    FOREIGN KEY (project_id) REFERENCES project(id)
+);
+"""
+
+
+PATROL_RECORD_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS patrol_record (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    patrol_date TEXT NOT NULL,
+    patrol_person TEXT,
+    building TEXT,
+    floor TEXT,
+    area TEXT,
+    discipline TEXT,
+    content TEXT,
+    found_problem TEXT,
+    handling_opinion TEXT,
+    generate_issue INTEGER NOT NULL DEFAULT 0,
+    issue_id INTEGER,
+    write_to_diary INTEGER NOT NULL DEFAULT 1,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    updated_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (project_id) REFERENCES project(id),
+    FOREIGN KEY (issue_id) REFERENCES issue(id)
+);
+"""
+
+
 DIARY_MATERIAL_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS diary_material (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -161,6 +213,8 @@ def initialize_database(settings: Settings) -> None:
         connection.execute(IMPORT_BATCH_TABLE_SQL)
         connection.execute(FIELD_MAPPING_TABLE_SQL)
         connection.execute(PROGRESS_RECORD_TABLE_SQL)
+        connection.execute(ISSUE_TABLE_SQL)
+        connection.execute(PATROL_RECORD_TABLE_SQL)
         connection.execute(DIARY_MATERIAL_TABLE_SQL)
         connection.commit()
 

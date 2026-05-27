@@ -8,6 +8,9 @@ import type {
   ProgressOverview,
   Project,
   ProjectInput,
+  QuickRecordAnalyzeResult,
+  QuickRecordConfirmFields,
+  QuickRecordConfirmResult,
   SmartInboxItem,
   SmartInboxUploadResult,
 } from "./types";
@@ -129,6 +132,28 @@ export async function fetchProgressDelayAnalysis(projectId: number): Promise<Pro
 
 export async function fetchProgressDataQuality(projectId: number): Promise<ProgressDataQuality> {
   return request<ProgressDataQuality>(`/api/progress/data-quality?project_id=${projectId}`);
+}
+
+export async function analyzeQuickRecord(projectId: number, content: string): Promise<QuickRecordAnalyzeResult> {
+  return request<QuickRecordAnalyzeResult>("/api/quick-record/analyze", {
+    method: "POST",
+    body: JSON.stringify({ project_id: projectId, content }),
+  });
+}
+
+export async function confirmQuickRecord(
+  projectId: number,
+  confirmedFields: QuickRecordConfirmFields,
+  confirmedActions: string[],
+): Promise<QuickRecordConfirmResult> {
+  return request<QuickRecordConfirmResult>("/api/quick-record/confirm", {
+    method: "POST",
+    body: JSON.stringify({
+      project_id: projectId,
+      confirmed_fields: confirmedFields,
+      confirmed_actions: confirmedActions,
+    }),
+  });
 }
 
 function normalizePayload<T extends Partial<ProjectInput>>(payload: T): Partial<ProjectInput> {

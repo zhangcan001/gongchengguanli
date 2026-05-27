@@ -381,6 +381,19 @@ p {
   transform: translateY(-1px);
 }
 
+.smart-entry-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 12px;
+}
+
+.input-placeholder.quick-entry {
+  border-color: rgba(30, 232, 214, 0.4);
+  background:
+    linear-gradient(135deg, rgba(30, 232, 214, 0.1), rgba(43, 168, 255, 0.08)),
+    rgba(5, 18, 33, 0.52);
+}
+
 .pending-inbox-panel {
   min-height: 220px;
 }
@@ -1017,6 +1030,166 @@ p {
   font-size: 13px;
 }
 
+.quick-console {
+  position: relative;
+  display: grid;
+  gap: 18px;
+  overflow: hidden;
+  border: 1px solid rgba(79, 206, 255, 0.34);
+  border-radius: 18px;
+  padding: 24px;
+  background:
+    linear-gradient(135deg, rgba(9, 35, 61, 0.96), rgba(4, 15, 29, 0.82)),
+    radial-gradient(circle at 78% 18%, rgba(30, 232, 214, 0.18), transparent 30%);
+  box-shadow:
+    0 26px 76px rgba(0, 0, 0, 0.32),
+    inset 0 0 54px rgba(43, 168, 255, 0.08);
+  backdrop-filter: blur(20px);
+}
+
+.quick-console::after {
+  position: absolute;
+  inset: 0;
+  pointer-events: none;
+  content: "";
+  opacity: 0;
+  background: linear-gradient(180deg, transparent 0%, rgba(30, 232, 214, 0.2) 48%, transparent 100%);
+  transform: translateY(-100%);
+}
+
+.quick-console.is-scanning::after {
+  animation: quick-scan 1.25s ease-in-out infinite;
+  opacity: 1;
+}
+
+.quick-console-head {
+  position: relative;
+  z-index: 1;
+  display: grid;
+  gap: 10px;
+}
+
+.quick-console-head h2 {
+  color: var(--text);
+  font-size: 30px;
+}
+
+.quick-console textarea,
+.quick-textarea-field textarea {
+  width: 100%;
+  border: 1px solid var(--line);
+  border-radius: 16px;
+  color: var(--text);
+  outline: none;
+  resize: vertical;
+  background: rgba(3, 16, 29, 0.76);
+}
+
+.quick-console textarea {
+  position: relative;
+  z-index: 1;
+  min-height: 150px;
+  padding: 18px;
+  font-size: 17px;
+  line-height: 1.8;
+  box-shadow: inset 0 0 30px rgba(43, 168, 255, 0.08);
+}
+
+.quick-console textarea:focus,
+.quick-textarea-field textarea:focus {
+  border-color: var(--line-strong);
+  box-shadow: 0 0 0 3px rgba(43, 168, 255, 0.12);
+}
+
+.quick-console-footer {
+  position: relative;
+  z-index: 1;
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 14px;
+}
+
+.quick-console-footer span {
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.quick-result-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  gap: 18px;
+}
+
+.quick-detected-panel,
+.quick-draft-panel,
+.quick-action-panel,
+.quick-created-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.quick-field-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.quick-textarea-field textarea {
+  min-height: 112px;
+  padding: 12px;
+  line-height: 1.65;
+}
+
+.quick-action-list {
+  display: grid;
+  gap: 12px;
+}
+
+.quick-action {
+  display: flex;
+  min-height: 46px;
+  align-items: center;
+  gap: 12px;
+  border: 1px solid rgba(79, 206, 255, 0.18);
+  border-radius: 14px;
+  padding: 0 14px;
+  color: var(--muted);
+  background: rgba(6, 21, 38, 0.64);
+}
+
+.quick-action.active {
+  border-color: rgba(30, 232, 214, 0.42);
+  color: var(--text);
+  background: rgba(30, 232, 214, 0.1);
+  box-shadow: 0 0 20px rgba(30, 232, 214, 0.08);
+}
+
+.quick-action input {
+  width: 16px;
+  height: 16px;
+  accent-color: var(--cyan);
+}
+
+.quick-confirm-button {
+  width: 100%;
+}
+
+.quick-created-list {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 12px;
+}
+
+@keyframes quick-scan {
+  0% {
+    transform: translateY(-100%);
+  }
+  100% {
+    transform: translateY(100%);
+  }
+}
+
 .page-header {
   display: flex;
   align-items: center;
@@ -1225,6 +1398,8 @@ p {
 
   .upload-console,
   .inbox-row,
+  .quick-result-grid,
+  .quick-created-list,
   .import-summary,
   .mapping-grid {
     grid-template-columns: 1fr;
@@ -1254,10 +1429,14 @@ p {
 
   .home-grid,
   .status-grid,
-  .dashboard-metrics,
-  .dashboard-grid,
-  .form-grid,
-  .detail-grid,
+    .dashboard-metrics,
+    .dashboard-grid,
+    .smart-entry-grid,
+    .quick-field-grid,
+    .quick-result-grid,
+    .quick-created-list,
+    .form-grid,
+    .detail-grid,
   .import-summary,
   .mapping-grid,
   .mapping-row,
@@ -1278,6 +1457,7 @@ p {
 
   .page-header,
   .detail-head,
+  .quick-console-footer,
   .publish-bar {
     align-items: stretch;
     flex-direction: column;

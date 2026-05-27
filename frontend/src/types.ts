@@ -217,3 +217,50 @@ export interface ProgressDataQuality {
   warning_items: ProgressDataQualityItem[];
   error_items: ProgressDataQualityItem[];
 }
+
+export interface QuickRecordDetected {
+  building: string;
+  floor: string;
+  area: string;
+  discipline: string;
+  issue_type: string;
+  description: string;
+}
+
+export interface QuickRecordGeneratedText {
+  patrol_content: string;
+  rectification_requirement: string;
+  diary_material: string;
+}
+
+export interface QuickRecordAnalyzeResult {
+  detected: QuickRecordDetected;
+  suggested_actions: string[];
+  generated_text: QuickRecordGeneratedText;
+}
+
+export interface QuickRecordConfirmFields {
+  building?: string | null;
+  floor?: string | null;
+  area?: string | null;
+  discipline?: string | null;
+  issue_type?: string | null;
+  description?: string | null;
+  patrol_content?: string | null;
+  rectification_requirement?: string | null;
+  diary_material?: string | null;
+  patrol_person?: string | null;
+  responsible_unit?: string | null;
+  discovered_by?: string | null;
+  deadline?: string | null;
+  patrol_date?: string | null;
+  material_date?: string | null;
+  level?: string | null;
+}
+
+export interface QuickRecordConfirmResult {
+  patrol_record_id: number | null;
+  issue_id: number | null;
+  diary_material_id: number | null;
+  status: string;
+}

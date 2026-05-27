@@ -252,3 +252,61 @@ class ProgressDataQualityResponse(BaseModel):
     error_count: int
     warning_items: list[ProgressDataQualityItem]
     error_items: list[ProgressDataQualityItem]
+
+
+class QuickRecordAnalyzeRequest(BaseModel):
+    project_id: int
+    content: str = Field(..., min_length=1, max_length=2000)
+
+
+class QuickRecordDetected(BaseModel):
+    building: str = ""
+    floor: str = ""
+    area: str = ""
+    discipline: str = ""
+    issue_type: str = "other"
+    description: str = ""
+
+
+class QuickRecordGeneratedText(BaseModel):
+    patrol_content: str
+    rectification_requirement: str
+    diary_material: str
+
+
+class QuickRecordAnalyzeResponse(BaseModel):
+    detected: QuickRecordDetected
+    suggested_actions: list[str]
+    generated_text: QuickRecordGeneratedText
+
+
+class QuickRecordConfirmFields(BaseModel):
+    building: str | None = None
+    floor: str | None = None
+    area: str | None = None
+    discipline: str | None = None
+    issue_type: str | None = None
+    description: str | None = None
+    patrol_content: str | None = None
+    rectification_requirement: str | None = None
+    diary_material: str | None = None
+    patrol_person: str | None = None
+    responsible_unit: str | None = None
+    discovered_by: str | None = None
+    deadline: date | None = None
+    patrol_date: date | None = None
+    material_date: date | None = None
+    level: str | None = None
+
+
+class QuickRecordConfirmRequest(BaseModel):
+    project_id: int
+    confirmed_fields: QuickRecordConfirmFields = Field(default_factory=QuickRecordConfirmFields)
+    confirmed_actions: list[str] = Field(default_factory=list)
+
+
+class QuickRecordConfirmResponse(BaseModel):
+    patrol_record_id: int | None = None
+    issue_id: int | None = None
+    diary_material_id: int | None = None
+    status: str

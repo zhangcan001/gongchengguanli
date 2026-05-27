@@ -22,6 +22,10 @@ from .models import (
     Project,
     ProjectCreate,
     ProjectUpdate,
+    QuickRecordAnalyzeRequest,
+    QuickRecordAnalyzeResponse,
+    QuickRecordConfirmRequest,
+    QuickRecordConfirmResponse,
     SmartInboxItem,
     SmartInboxUploadResponse,
 )
@@ -33,6 +37,7 @@ from .progress_import import (
     publish_progress_import,
     validate_progress_import,
 )
+from .quick_record import QuickRecordService
 from .repositories import (
     RepositoryError,
     create_project,
@@ -239,6 +244,26 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         try:
             return ProgressAnalyticsService(connection).get_data_quality(project_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/quick-record/analyze", response_model=QuickRecordAnalyzeResponse)
+    def api_analyze_quick_record(
+        payload: QuickRecordAnalyzeRequest,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return QuickRecordService(connection).analyze(payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/quick-record/confirm", response_model=QuickRecordConfirmResponse)
+    def api_confirm_quick_record(
+        payload: QuickRecordConfirmRequest,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return QuickRecordService(connection).confirm(payload)
         except RepositoryError as error:
             handle_repository_error(error)
 

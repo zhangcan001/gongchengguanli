@@ -16,6 +16,7 @@ import {
   Inbox,
   Layers3,
   ListTodo,
+  MessageSquareText,
   Plus,
   Radar,
   Save,
@@ -27,7 +28,9 @@ import {
 import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
 import {
+  analyzeQuickRecord,
   analyzeProgressImport,
+  confirmQuickRecord,
   createProject,
   deleteProject,
   fetchImportBatch,
@@ -51,6 +54,9 @@ import type {
   ProgressImportBatch,
   Project,
   ProjectInput,
+  QuickRecordAnalyzeResult,
+  QuickRecordConfirmFields,
+  QuickRecordConfirmResult,
   SmartInboxItem,
 } from "./types";
 
@@ -60,6 +66,7 @@ type View =
   | { name: "smart-inbox" }
   | { name: "progress-import"; batchId: number }
   | { name: "progress-dashboard" }
+  | { name: "quick-record" }
   | { name: "new-project" }
   | { name: "project-detail"; projectId: number };
 
@@ -207,6 +214,14 @@ function App() {
         >
           <BarChart3 size={20} />
         </button>
+        <button
+          className={view.name === "quick-record" ? "rail-button active" : "rail-button"}
+          type="button"
+          onClick={() => navigate({ name: "quick-record" })}
+          title="一句话现场记录"
+        >
+          <MessageSquareText size={20} />
+        </button>
       </aside>
 
       <section className="workspace">
@@ -220,6 +235,7 @@ function App() {
             onNewProject={() => navigate({ name: "new-project" })}
             onOpenInbox={() => navigate({ name: "smart-inbox" })}
             onOpenProgressDashboard={() => navigate({ name: "progress-dashboard" })}
+            onOpenQuickRecord={() => navigate({ name: "quick-record" })}
           />
         )}
         {view.name === "smart-inbox" && (
@@ -248,6 +264,12 @@ function App() {
             projects={projects}
             onNewProject={() => navigate({ name: "new-project" })}
             onOpenInbox={() => navigate({ name: "smart-inbox" })}
+          />
+        )}
+        {view.name === "quick-record" && (
+          <QuickRecordView
+            projects={projects}
+            onNewProject={() => navigate({ name: "new-project" })}
           />
         )}
         {view.name === "projects" && (
@@ -293,6 +315,7 @@ interface HomeViewProps {
   onNewProject: () => void;
   onOpenInbox: () => void;
   onOpenProgressDashboard: () => void;
+  onOpenQuickRecord: () => void;
 }
 
 function HomeView({
@@ -304,6 +327,7 @@ function HomeView({
   onNewProject,
   onOpenInbox,
   onOpenProgressDashboard,
+  onOpenQuickRecord,
 }: HomeViewProps) {
   const activeCount = projects.filter((project) => project.status === "active").length;
   const pendingItems = inboxItems.filter((item) => item.status === "pending");
@@ -318,10 +342,10 @@ function HomeView({
         <div className="hero-copy">
           <div className="eyebrow">
             <Sparkles size={16} />
-            阶段 4 进度看板与数据质量
+            阶段 5 一句话现场记录
           </div>
           <h1>智能工程监理工作台</h1>
-          <p>已发布进度数据可进入看板，查看项目完成率、楼栋/专业统计、滞后任务和数据质量提醒。</p>
+          <p>输入一句现场情况，系统自动识别楼栋、楼层、专业和问题类型，生成巡视记录、问题草稿与日志素材。</p>
           <div className="hero-actions">
             <button className="primary-button" type="button" onClick={onOpenInbox}>
               <UploadCloud size={18} />
@@ -358,13 +382,19 @@ function HomeView({
           <Bot size={20} />
           <div>
             <h2>智能输入区</h2>
-            <span>进度表投递与发布入口</span>
+            <span>资料投递与现场快速记录入口</span>
           </div>
         </div>
-        <button className="input-placeholder inbox-entry" type="button" onClick={onOpenInbox}>
-          <UploadCloud size={30} />
-          <span>投递 Excel 进度表后，可在智能投递箱识别、预览并确认发布。</span>
-        </button>
+        <div className="smart-entry-grid">
+          <button className="input-placeholder inbox-entry" type="button" onClick={onOpenInbox}>
+            <UploadCloud size={30} />
+            <span>投递 Excel 进度表后，可在智能投递箱识别、预览并确认发布。</span>
+          </button>
+          <button className="input-placeholder inbox-entry quick-entry" type="button" onClick={onOpenQuickRecord}>
+            <MessageSquareText size={30} />
+            <span>输入一句现场情况，生成巡视记录、问题草稿和日志素材。</span>
+          </button>
+        </div>
       </section>
 
       <section className="panel pending-inbox-panel">
@@ -456,6 +486,21 @@ const delayLevelLabels: Record<string, string> = {
   slight_delay: "轻微滞后",
   obvious_delay: "明显滞后",
   serious_delay: "严重滞后",
+};
+
+const quickIssueTypeLabels: Record<string, string> = {
+  quality: "质量问题",
+  safety: "安全隐患",
+  progress: "进度问题",
+  document: "资料问题",
+  drawing: "图纸问题",
+  other: "其他",
+};
+
+const quickActionLabels: Record<string, string> = {
+  create_patrol: "生成巡视记录",
+  create_issue: "生成问题草稿",
+  write_diary_material: "写入日志素材",
 };
 
 function ProgressDashboardView({
@@ -642,6 +687,295 @@ function MetricCard({ title, value, hint, tone }: { title: string; value: string
       <small>{hint}</small>
     </article>
   );
+}
+
+function QuickRecordView({ projects, onNewProject }: { projects: Project[]; onNewProject: () => void }) {
+  const [selectedProjectId, setSelectedProjectId] = useState<number | "">(projects[0]?.id ?? "");
+  const [content, setContent] = useState("");
+  const [analyzing, setAnalyzing] = useState(false);
+  const [saving, setSaving] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+  const [analysis, setAnalysis] = useState<QuickRecordAnalyzeResult | null>(null);
+  const [fields, setFields] = useState<QuickRecordConfirmFields | null>(null);
+  const [actions, setActions] = useState<string[]>([]);
+  const [confirmResult, setConfirmResult] = useState<QuickRecordConfirmResult | null>(null);
+
+  useEffect(() => {
+    if (!selectedProjectId && projects[0]?.id) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects, selectedProjectId]);
+
+  async function handleAnalyze() {
+    if (!selectedProjectId) {
+      setError("请先选择项目。");
+      return;
+    }
+    if (!content.trim()) {
+      setError("请输入现场情况。");
+      return;
+    }
+
+    setAnalyzing(true);
+    setError("");
+    setMessage("");
+    setConfirmResult(null);
+    try {
+      const result = await analyzeQuickRecord(Number(selectedProjectId), content.trim());
+      setAnalysis(result);
+      setFields({
+        ...result.detected,
+        ...result.generated_text,
+        patrol_person: "",
+        responsible_unit: "",
+        discovered_by: "",
+        deadline: "",
+        level: "normal",
+      });
+      setActions(result.suggested_actions);
+      setMessage("识别完成，请确认或修改后生成正式记录。");
+    } catch (analysisError) {
+      setError(analysisError instanceof Error ? analysisError.message : "智能识别失败");
+    } finally {
+      setAnalyzing(false);
+    }
+  }
+
+  function updateQuickField(field: keyof QuickRecordConfirmFields, value: string) {
+    setFields((current) => (current ? { ...current, [field]: value } : current));
+  }
+
+  function toggleAction(action: string) {
+    setActions((current) => (current.includes(action) ? current.filter((item) => item !== action) : [...current, action]));
+  }
+
+  async function handleConfirm() {
+    if (!selectedProjectId || !fields) {
+      return;
+    }
+    if (actions.length === 0) {
+      setError("请至少选择一个生成动作。");
+      return;
+    }
+
+    setSaving(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await confirmQuickRecord(Number(selectedProjectId), normalizeQuickFields(fields), actions);
+      setConfirmResult(result);
+      setMessage("正式记录已生成。");
+    } catch (confirmError) {
+      setError(confirmError instanceof Error ? confirmError.message : "确认生成失败");
+    } finally {
+      setSaving(false);
+    }
+  }
+
+  return (
+    <div className="page-stack quick-record-page">
+      <PageHeader
+        eyebrow="阶段 5"
+        title="一句话现场记录"
+        description="输入一句现场情况，系统按规则识别部位、专业和问题类型，生成可编辑草稿，确认后写入正式数据。"
+        action={
+          projects.length === 0 ? (
+            <button className="primary-button" type="button" onClick={onNewProject}>
+              <Plus size={18} />
+              新建项目
+            </button>
+          ) : (
+            <label className="field compact-field dashboard-project-select" htmlFor="quick-record-project">
+              <span>当前项目</span>
+              <select
+                id="quick-record-project"
+                value={selectedProjectId}
+                onChange={(event) => setSelectedProjectId(Number(event.target.value))}
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )
+        }
+      />
+
+      {projects.length === 0 && (
+        <section className="panel">
+          <EmptyState title="暂无项目" text="先新建项目，再录入现场情况。" />
+        </section>
+      )}
+
+      {projects.length > 0 && (
+        <>
+          <section className={`quick-console ${analyzing ? "is-scanning" : ""}`}>
+            <div className="quick-console-head">
+              <div className="eyebrow">
+                <Sparkles size={16} />
+                规则识别 · 人工确认
+              </div>
+              <h2>现场情况智能解析</h2>
+            </div>
+            <textarea
+              value={content}
+              onChange={(event) => setContent(event.target.value)}
+              placeholder="请输入现场情况，例如：3#楼12层砌体灰缝不饱满，要求整改。"
+            />
+            <div className="quick-console-footer">
+              <span>{analyzing ? "正在扫描关键词、楼栋和楼层..." : "当前阶段使用本地规则识别，不调用 AI。"}</span>
+              <button className="primary-button" type="button" disabled={analyzing} onClick={() => void handleAnalyze()}>
+                <Bot size={18} />
+                {analyzing ? "智能识别中..." : "智能识别"}
+              </button>
+            </div>
+          </section>
+
+          {error && <div className="error-banner">{error}</div>}
+          {message && <div className="success-banner">{message}</div>}
+
+          {analysis && fields && (
+            <section className="quick-result-grid">
+              <section className="panel quick-detected-panel">
+                <div className="list-toolbar">
+                  <span>识别结果</span>
+                  <span className="muted-note">可手动修改</span>
+                </div>
+                <div className="quick-field-grid">
+                  <QuickInput label="楼栋" value={fields.building} onChange={(value) => updateQuickField("building", value)} />
+                  <QuickInput label="楼层" value={fields.floor} onChange={(value) => updateQuickField("floor", value)} />
+                  <QuickInput label="区域" value={fields.area} onChange={(value) => updateQuickField("area", value)} />
+                  <QuickInput label="专业" value={fields.discipline} onChange={(value) => updateQuickField("discipline", value)} />
+                  <label className="field" htmlFor="quick-issue-type">
+                    <span>问题类型</span>
+                    <select
+                      id="quick-issue-type"
+                      value={fields.issue_type ?? "other"}
+                      onChange={(event) => updateQuickField("issue_type", event.target.value)}
+                    >
+                      {Object.entries(quickIssueTypeLabels).map(([value, label]) => (
+                        <option key={value} value={value}>
+                          {label}
+                        </option>
+                      ))}
+                    </select>
+                  </label>
+                  <label className="field" htmlFor="quick-level">
+                    <span>问题等级</span>
+                    <select id="quick-level" value={fields.level ?? "normal"} onChange={(event) => updateQuickField("level", event.target.value)}>
+                      <option value="normal">普通</option>
+                      <option value="important">重要</option>
+                      <option value="urgent">紧急</option>
+                      <option value="major">重大</option>
+                    </select>
+                  </label>
+                </div>
+                <QuickTextarea label="问题描述" value={fields.description} onChange={(value) => updateQuickField("description", value)} />
+                <div className="quick-field-grid">
+                  <QuickInput label="巡视人" value={fields.patrol_person ?? ""} onChange={(value) => updateQuickField("patrol_person", value)} />
+                  <QuickInput label="责任单位" value={fields.responsible_unit ?? ""} onChange={(value) => updateQuickField("responsible_unit", value)} />
+                  <QuickInput label="发现人" value={fields.discovered_by ?? ""} onChange={(value) => updateQuickField("discovered_by", value)} />
+                  <QuickInput label="整改期限" type="date" value={fields.deadline ?? ""} onChange={(value) => updateQuickField("deadline", value)} />
+                </div>
+              </section>
+
+              <section className="panel quick-draft-panel">
+                <div className="list-toolbar">
+                  <span>生成草稿</span>
+                  <span className="muted-note">确认后写入正式表</span>
+                </div>
+                <QuickTextarea label="整改要求" value={fields.rectification_requirement} onChange={(value) => updateQuickField("rectification_requirement", value)} />
+                <QuickTextarea label="巡视记录草稿" value={fields.patrol_content} onChange={(value) => updateQuickField("patrol_content", value)} />
+                <QuickTextarea label="日志素材" value={fields.diary_material} onChange={(value) => updateQuickField("diary_material", value)} />
+              </section>
+
+              <section className="panel quick-action-panel">
+                <div className="list-toolbar">
+                  <span>建议动作</span>
+                  <span className="muted-note">阶段 5 不执行完整流转</span>
+                </div>
+                <div className="quick-action-list">
+                  {Object.entries(quickActionLabels).map(([action, label]) => (
+                    <label className={actions.includes(action) ? "quick-action active" : "quick-action"} key={action}>
+                      <input checked={actions.includes(action)} type="checkbox" onChange={() => toggleAction(action)} />
+                      <span>{label}</span>
+                    </label>
+                  ))}
+                </div>
+                <button className="primary-button quick-confirm-button" type="button" disabled={saving} onClick={() => void handleConfirm()}>
+                  <Save size={18} />
+                  {saving ? "生成中..." : "确认生成"}
+                </button>
+              </section>
+
+              <section className="panel quick-created-panel">
+                <div className="list-toolbar">
+                  <span>生成结果</span>
+                  <span className="muted-note">本次确认反馈</span>
+                </div>
+                {confirmResult ? (
+                  <div className="quick-created-list">
+                    <Info label="巡视记录" value={confirmResult.patrol_record_id ? `#${confirmResult.patrol_record_id}` : "未生成"} />
+                    <Info label="问题草稿" value={confirmResult.issue_id ? `#${confirmResult.issue_id}` : "未生成"} />
+                    <Info label="日志素材" value={confirmResult.diary_material_id ? `#${confirmResult.diary_material_id}` : "未生成"} />
+                  </div>
+                ) : (
+                  <EmptyLine text="确认生成后，这里会显示写入的记录编号。" />
+                )}
+              </section>
+            </section>
+          )}
+        </>
+      )}
+    </div>
+  );
+}
+
+function QuickInput({
+  label,
+  value,
+  onChange,
+  type = "text",
+}: {
+  label: string;
+  value: string | null | undefined;
+  onChange: (value: string) => void;
+  type?: string;
+}) {
+  const id = `quick-${label}`;
+  return (
+    <label className="field" htmlFor={id}>
+      <span>{label}</span>
+      <input id={id} type={type} value={value ?? ""} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function QuickTextarea({
+  label,
+  value,
+  onChange,
+}: {
+  label: string;
+  value: string | null | undefined;
+  onChange: (value: string) => void;
+}) {
+  const id = `quick-${label}`;
+  return (
+    <label className="field quick-textarea-field" htmlFor={id}>
+      <span>{label}</span>
+      <textarea id={id} value={value ?? ""} onChange={(event) => onChange(event.target.value)} />
+    </label>
+  );
+}
+
+function normalizeQuickFields(fields: QuickRecordConfirmFields): QuickRecordConfirmFields {
+  return Object.fromEntries(
+    Object.entries(fields).map(([key, value]) => [key, value === "" ? null : value]),
+  ) as QuickRecordConfirmFields;
 }
 
 function SummaryList({ items }: { items: ProgressSummaryItem[] }) {
