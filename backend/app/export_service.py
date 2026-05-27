@@ -13,6 +13,7 @@ from openpyxl import Workbook
 from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
+from .archive_service import ArchiveService
 from .config import Settings
 from .errors import ErrorCode
 from .issues import IssueService
@@ -655,7 +656,15 @@ class ExportService:
             ),
         )
         self.connection.commit()
-        return self.get_file_asset(int(cursor.lastrowid))
+        asset = self.get_file_asset(int(cursor.lastrowid))
+        archive = ArchiveService(self.connection, self.settings).archive_file_asset(
+            file_id=asset["id"],
+            business_type=business_type,
+            business_id=business_id,
+        )
+        asset["archive_id"] = archive["id"]
+        asset["archive_path"] = archive["archive_path"]
+        return asset
 
     def _write_sheet_table(self, worksheet: Any, rows: list[list[Any]]) -> None:
         if not rows:

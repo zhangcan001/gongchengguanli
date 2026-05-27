@@ -1,6 +1,7 @@
 import type {
   AISettings,
   AISettingsInput,
+  ArchiveOpenPath,
   Diary,
   DiaryConfirmInput,
   DiaryGenerateInput,
@@ -9,6 +10,7 @@ import type {
   DiaryMaterialInput,
   DiaryMaterialSummary,
   DiaryMaterialUpdateInput,
+  DocumentArchive,
   ExportFile,
   FieldMapping,
   Issue,
@@ -354,6 +356,44 @@ export async function exportPatrolWord(patrolId: number): Promise<ExportFile> {
   return request<ExportFile>(`/api/patrol/${patrolId}/export`, {
     method: "POST",
   });
+}
+
+export interface ArchiveFilters {
+  project_id?: number;
+  document_type?: string;
+  business_type?: string;
+  date_from?: string;
+  date_to?: string;
+  keyword?: string;
+}
+
+export async function fetchArchives(filters: ArchiveFilters = {}): Promise<DocumentArchive[]> {
+  const query = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request<DocumentArchive[]>(`/api/archive${suffix}`);
+}
+
+export async function fetchArchive(archiveId: number): Promise<DocumentArchive> {
+  return request<DocumentArchive>(`/api/archive/${archiveId}`);
+}
+
+export async function autoArchiveBusiness(businessType: string, businessId: number): Promise<DocumentArchive> {
+  return request<DocumentArchive>(`/api/archive/${encodeURIComponent(businessType)}/${businessId}/auto-archive`, {
+    method: "POST",
+  });
+}
+
+export async function exportArchivePackage(projectId: number): Promise<ExportFile> {
+  return request<ExportFile>(`/api/archive/export-package?project_id=${projectId}`);
+}
+
+export async function openArchivePath(archiveId: number): Promise<ArchiveOpenPath> {
+  return request<ArchiveOpenPath>(`/api/archive/open-path?archive_id=${archiveId}`);
 }
 
 function issueAction(path: string, payload: IssueActionPayload): Promise<Issue> {

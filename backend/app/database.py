@@ -262,6 +262,23 @@ CREATE TABLE IF NOT EXISTS app_setting (
 """
 
 
+DOCUMENT_ARCHIVE_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS document_archive (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    project_id INTEGER NOT NULL,
+    business_type TEXT NOT NULL,
+    business_id INTEGER,
+    document_type TEXT NOT NULL,
+    file_id INTEGER NOT NULL,
+    archive_path TEXT NOT NULL,
+    archive_status TEXT NOT NULL DEFAULT 'archived',
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (project_id) REFERENCES project(id),
+    FOREIGN KEY (file_id) REFERENCES file_asset(id)
+);
+"""
+
+
 def connect_database(database_path: Path) -> sqlite3.Connection:
     connection = sqlite3.connect(database_path, check_same_thread=False)
     connection.row_factory = sqlite3.Row
@@ -285,6 +302,7 @@ def initialize_database(settings: Settings) -> None:
         connection.execute(DIARY_TABLE_SQL)
         connection.execute(AI_GENERATION_TABLE_SQL)
         connection.execute(APP_SETTING_TABLE_SQL)
+        connection.execute(DOCUMENT_ARCHIVE_TABLE_SQL)
         connection.execute("UPDATE diary_material SET source_type = 'progress' WHERE source_type = 'progress_import'")
         connection.execute("UPDATE diary_material SET source_type = 'manual' WHERE source_type = 'quick_record'")
         connection.commit()

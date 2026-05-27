@@ -839,6 +839,12 @@ p {
   overflow-wrap: anywhere;
 }
 
+.archive-path-note {
+  display: block;
+  margin-top: 6px;
+  color: #bdf7ff !important;
+}
+
 .export-result-actions {
   display: flex;
   align-items: center;
@@ -1026,6 +1032,118 @@ p {
 
 .diary-status-card strong.used {
   color: var(--green);
+}
+
+.archive-home-card {
+  display: grid;
+  width: 100%;
+  gap: 7px;
+  margin-top: 18px;
+  border: 1px solid rgba(30, 232, 214, 0.28);
+  border-radius: 16px;
+  padding: 15px;
+  color: var(--text);
+  background:
+    linear-gradient(135deg, rgba(30, 232, 214, 0.1), rgba(43, 168, 255, 0.08)),
+    rgba(6, 21, 38, 0.72);
+  text-align: left;
+}
+
+.archive-home-card strong {
+  overflow-wrap: anywhere;
+}
+
+.archive-home-card span,
+.archive-home-card small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.archive-metrics {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.archive-filter-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.archive-filters {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(150px, 0.8fr)) minmax(220px, 1fr) auto;
+  gap: 12px;
+  align-items: end;
+}
+
+.archive-search-button {
+  min-height: 44px;
+}
+
+.archive-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.archive-card {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  gap: 14px;
+  align-items: center;
+  border: 1px solid rgba(79, 206, 255, 0.2);
+  border-radius: 18px;
+  padding: 16px;
+  background:
+    linear-gradient(135deg, rgba(9, 29, 52, 0.86), rgba(4, 16, 30, 0.72)),
+    radial-gradient(circle at 96% 20%, rgba(30, 232, 214, 0.08), transparent 24%);
+}
+
+.archive-card-icon {
+  display: grid;
+  width: 48px;
+  height: 48px;
+  place-items: center;
+  border-radius: 14px;
+  color: var(--cyan);
+  background: rgba(30, 232, 214, 0.1);
+}
+
+.archive-card-main {
+  display: grid;
+  gap: 8px;
+  min-width: 0;
+}
+
+.archive-card-head,
+.archive-card-meta,
+.archive-card-actions {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 10px;
+}
+
+.archive-card-head {
+  justify-content: space-between;
+}
+
+.archive-card-head strong {
+  color: var(--text);
+  overflow-wrap: anywhere;
+}
+
+.archive-card-meta,
+.archive-card-main small {
+  color: var(--muted);
+  font-size: 12px;
+  overflow-wrap: anywhere;
+}
+
+.archive-card-actions {
+  justify-content: flex-end;
+  min-width: 260px;
 }
 
 .diary-generate-console {
@@ -2026,12 +2144,14 @@ p {
   }
 
   .dashboard-metrics,
+  .archive-metrics,
   .dashboard-grid,
   .issue-metrics,
   .diary-metrics,
   .diary-draft-grid,
   .settings-grid,
-  .diary-generate-grid {
+  .diary-generate-grid,
+  .archive-filters {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -2041,6 +2161,7 @@ p {
 
   .upload-console,
   .inbox-row,
+  .archive-card,
   .issue-workbench,
   .diary-workbench,
   .quick-result-grid,
@@ -2075,12 +2196,15 @@ p {
   .home-grid,
   .status-grid,
     .dashboard-metrics,
+    .archive-metrics,
     .dashboard-grid,
     .issue-metrics,
     .diary-metrics,
     .diary-draft-grid,
     .settings-grid,
     .diary-generate-grid,
+    .archive-filters,
+    .archive-card,
     .issue-workbench,
     .diary-workbench,
     .issue-summary-card,
@@ -2114,6 +2238,7 @@ p {
   .issue-detail-head,
   .issue-search,
   .export-result-card,
+  .archive-card-actions,
   .diary-header-actions,
   .quick-console-footer,
   .publish-bar {

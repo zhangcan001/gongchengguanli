@@ -48,6 +48,34 @@ export interface FileAsset {
 
 export interface ExportFile extends FileAsset {
   download_url: string;
+  archive_id?: number | null;
+  archive_path?: string | null;
+}
+
+export interface DocumentArchive {
+  id: number;
+  project_id: number;
+  business_type: string;
+  business_id: number | null;
+  document_type: string;
+  file_id: number;
+  archive_path: string;
+  archive_status: string;
+  created_at: string;
+  project_name: string | null;
+  file_name: string | null;
+  original_file_name: string | null;
+  file_type: string | null;
+  file_size: number | null;
+  download_url: string | null;
+}
+
+export interface ArchiveOpenPath {
+  archive_id: number;
+  archive_path: string;
+  absolute_path: string;
+  exists: boolean;
+  download_url: string;
 }
 
 export interface SmartInboxItem {

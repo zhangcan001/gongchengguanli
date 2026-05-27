@@ -4,6 +4,7 @@ from datetime import date
 from pathlib import Path
 from typing import Any
 
+from .archive_service import ArchiveService
 from .config import Settings
 from .diary_materials import create_diary_material
 from .errors import ErrorCode
@@ -373,6 +374,7 @@ def validate_progress_import(
 
 def publish_progress_import(
     connection: sqlite3.Connection,
+    settings: Settings,
     batch_id: int,
     payload: ProgressImportPublishRequest,
 ) -> dict[str, Any]:
@@ -432,6 +434,14 @@ def publish_progress_import(
         ("published", 0, batch_id),
     )
     connection.execute("UPDATE smart_inbox SET status = ?, processed_at = datetime('now') WHERE id = ?", ("processed", batch["inbox_id"]))
+    inbox_file = _get_inbox_file(connection, project_id=batch["project_id"], inbox_id=batch["inbox_id"])
+    ArchiveService(connection, settings).archive_file_asset(
+        file_id=inbox_file["file_id"],
+        business_type="progress_import",
+        business_id=batch_id,
+        document_type="progress",
+        archive_date=batch["data_date"],
+    )
     connection.commit()
 
     return {

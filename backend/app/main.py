@@ -14,6 +14,7 @@ from .errors import ErrorCode
 from .models import (
     AISettings,
     AISettingsUpdate,
+    ArchiveOpenPathResponse,
     Diary,
     DiaryConfirmRequest,
     DiaryGenerateRequest,
@@ -22,6 +23,7 @@ from .models import (
     DiaryMaterialCreate,
     DiaryMaterialSummaryResponse,
     DiaryMaterialUpdate,
+    DocumentArchive,
     ExportFileResponse,
     HealthResponse,
     Issue,
@@ -55,6 +57,7 @@ from .models import (
     SmartInboxUploadResponse,
 )
 from .ai_service import AIService
+from .archive_service import ArchiveService
 from .diary import DiaryService
 from .diary_materials import DiaryMaterialService
 from .export_service import ExportService
@@ -146,6 +149,12 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
         if error.code == ErrorCode.PATROL_RECORD_NOT_FOUND:
             raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.ARCHIVE_NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.ARCHIVE_SOURCE_NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.ARCHIVE_PACKAGE_EMPTY:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code, "message": error.message})
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"code": "UNKNOWN_ERROR", "message": "Unknown error."})
 
     @app.get("/api/health", response_model=HealthResponse)
@@ -247,7 +256,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         connection: sqlite3.Connection = Depends(get_db),
     ) -> dict:
         try:
-            return publish_progress_import(connection, batch_id, payload)
+            return publish_progress_import(connection, app_settings, batch_id, payload)
         except RepositoryError as error:
             handle_repository_error(error)
 
@@ -649,6 +658,69 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         try:
             return QuickRecordService(connection).confirm(payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/archive", response_model=list[DocumentArchive])
+    def api_list_archives(
+        project_id: int | None = Query(default=None),
+        document_type: str | None = Query(default=None),
+        business_type: str | None = Query(default=None),
+        date_from: date | None = Query(default=None),
+        date_to: date | None = Query(default=None),
+        keyword: str | None = Query(default=None),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> list[dict]:
+        try:
+            return ArchiveService(connection, app_settings).list_archives(
+                project_id=project_id,
+                document_type=document_type,
+                business_type=business_type,
+                date_from=date_from,
+                date_to=date_to,
+                keyword=keyword,
+            )
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/archive/export-package", response_model=ExportFileResponse)
+    def api_export_archive_package(
+        project_id: int = Query(...),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ArchiveService(connection, app_settings).export_package(project_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/archive/open-path", response_model=ArchiveOpenPathResponse)
+    def api_open_archive_path(
+        archive_id: int = Query(...),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ArchiveService(connection, app_settings).open_path(archive_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/archive/{business_type}/{business_id}/auto-archive", response_model=DocumentArchive)
+    def api_auto_archive_business(
+        business_type: str,
+        business_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ArchiveService(connection, app_settings).archive_business(business_type, business_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/archive/{archive_id}", response_model=DocumentArchive)
+    def api_get_archive(
+        archive_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ArchiveService(connection, app_settings).get_archive(archive_id)
         except RepositoryError as error:
             handle_repository_error(error)
 

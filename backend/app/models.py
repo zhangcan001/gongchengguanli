@@ -64,6 +64,34 @@ class FileAsset(BaseModel):
 
 class ExportFileResponse(FileAsset):
     download_url: str
+    archive_id: int | None = None
+    archive_path: str | None = None
+
+
+class DocumentArchive(BaseModel):
+    id: int
+    project_id: int
+    business_type: str
+    business_id: int | None = None
+    document_type: str
+    file_id: int
+    archive_path: str
+    archive_status: str
+    created_at: datetime
+    project_name: str | None = None
+    file_name: str | None = None
+    original_file_name: str | None = None
+    file_type: str | None = None
+    file_size: int | None = None
+    download_url: str | None = None
+
+
+class ArchiveOpenPathResponse(BaseModel):
+    archive_id: int
+    archive_path: str
+    absolute_path: str
+    exists: bool
+    download_url: str
 
 
 class ProgressExportAnalysisRequest(BaseModel):
