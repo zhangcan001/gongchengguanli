@@ -264,3 +264,105 @@ export interface QuickRecordConfirmResult {
   diary_material_id: number | null;
   status: string;
 }
+
+export type IssueType = "quality" | "safety" | "progress" | "document" | "drawing" | "other";
+export type IssueLevel = "normal" | "important" | "urgent" | "major";
+export type IssueStatus =
+  | "pending_rectification"
+  | "notified"
+  | "replied"
+  | "pending_review"
+  | "closed"
+  | "archived"
+  | "overdue"
+  | "rejected"
+  | "reopened";
+
+export interface IssueAction {
+  id: number;
+  issue_id: number;
+  action_type: string;
+  content: string | null;
+  operator: string | null;
+  action_date: string;
+  created_at: string;
+}
+
+export interface IssueArchiveCheck {
+  issue_id: number;
+  complete: boolean;
+  missing_items: string[];
+  items: Record<string, boolean>;
+}
+
+export interface Issue {
+  id: number;
+  project_id: number;
+  issue_type: IssueType | string;
+  level: IssueLevel | string;
+  title: string;
+  description: string;
+  building: string | null;
+  floor: string | null;
+  area: string | null;
+  discipline: string | null;
+  responsible_unit: string | null;
+  discovered_by: string | null;
+  discovered_date: string;
+  deadline: string | null;
+  status: IssueStatus | string;
+  effective_status: IssueStatus | string;
+  is_overdue: boolean;
+  rectification_requirement: string | null;
+  source_type: string | null;
+  source_id: number | null;
+  created_at: string;
+  updated_at: string;
+  closed_at: string | null;
+  project_name: string | null;
+  actions: IssueAction[];
+  archive_check?: IssueArchiveCheck | null;
+}
+
+export interface IssueInput {
+  project_id: number;
+  issue_type: IssueType | string;
+  level: IssueLevel | string;
+  title: string;
+  description: string;
+  building?: string | null;
+  floor?: string | null;
+  area?: string | null;
+  discipline?: string | null;
+  responsible_unit?: string | null;
+  discovered_by?: string | null;
+  discovered_date?: string | null;
+  deadline?: string | null;
+  status?: IssueStatus | string;
+  rectification_requirement?: string | null;
+  source_type?: string | null;
+  source_id?: number | null;
+}
+
+export interface IssueActionPayload {
+  content: string;
+  operator?: string | null;
+  action_date?: string | null;
+  mark_pending_review?: boolean;
+  close_issue?: boolean;
+}
+
+export interface IssueSummaryGroup {
+  label: string;
+  count: number;
+}
+
+export interface IssueSummary {
+  pending_rectification_count: number;
+  pending_review_count: number;
+  overdue_count: number;
+  due_today_count: number;
+  closed_count: number;
+  by_type: IssueSummaryGroup[];
+  by_responsible_unit: IssueSummaryGroup[];
+}

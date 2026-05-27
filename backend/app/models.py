@@ -310,3 +310,125 @@ class QuickRecordConfirmResponse(BaseModel):
     issue_id: int | None = None
     diary_material_id: int | None = None
     status: str
+
+
+class IssueBase(BaseModel):
+    project_id: int
+    issue_type: str = Field(default="other", max_length=40)
+    level: str = Field(default="normal", max_length=40)
+    title: str = Field(..., min_length=1, max_length=200)
+    description: str = Field(..., min_length=1, max_length=4000)
+    building: str | None = Field(default=None, max_length=80)
+    floor: str | None = Field(default=None, max_length=80)
+    area: str | None = Field(default=None, max_length=120)
+    discipline: str | None = Field(default=None, max_length=80)
+    responsible_unit: str | None = Field(default=None, max_length=160)
+    discovered_by: str | None = Field(default=None, max_length=80)
+    discovered_date: date | None = None
+    deadline: date | None = None
+    status: str = Field(default="pending_rectification", max_length=40)
+    rectification_requirement: str | None = Field(default=None, max_length=4000)
+    source_type: str | None = Field(default=None, max_length=80)
+    source_id: int | None = None
+
+
+class IssueCreate(IssueBase):
+    pass
+
+
+class IssueUpdate(BaseModel):
+    issue_type: str | None = Field(default=None, max_length=40)
+    level: str | None = Field(default=None, max_length=40)
+    title: str | None = Field(default=None, min_length=1, max_length=200)
+    description: str | None = Field(default=None, min_length=1, max_length=4000)
+    building: str | None = Field(default=None, max_length=80)
+    floor: str | None = Field(default=None, max_length=80)
+    area: str | None = Field(default=None, max_length=120)
+    discipline: str | None = Field(default=None, max_length=80)
+    responsible_unit: str | None = Field(default=None, max_length=160)
+    discovered_by: str | None = Field(default=None, max_length=80)
+    discovered_date: date | None = None
+    deadline: date | None = None
+    status: str | None = Field(default=None, max_length=40)
+    rectification_requirement: str | None = Field(default=None, max_length=4000)
+    source_type: str | None = Field(default=None, max_length=80)
+    source_id: int | None = None
+
+
+class IssueActionInput(BaseModel):
+    content: str = Field(..., min_length=1, max_length=4000)
+    operator: str | None = Field(default=None, max_length=80)
+    action_date: date | None = None
+
+
+class IssueReplyRequest(IssueActionInput):
+    mark_pending_review: bool = True
+
+
+class IssueReviewRequest(IssueActionInput):
+    close_issue: bool = False
+
+
+class IssueCloseRequest(IssueActionInput):
+    pass
+
+
+class IssueAction(BaseModel):
+    id: int
+    issue_id: int
+    action_type: str
+    content: str | None = None
+    operator: str | None = None
+    action_date: date
+    created_at: datetime
+
+
+class Issue(BaseModel):
+    id: int
+    project_id: int
+    issue_type: str
+    level: str
+    title: str
+    description: str
+    building: str | None = None
+    floor: str | None = None
+    area: str | None = None
+    discipline: str | None = None
+    responsible_unit: str | None = None
+    discovered_by: str | None = None
+    discovered_date: date
+    deadline: date | None = None
+    status: str
+    effective_status: str
+    is_overdue: bool
+    rectification_requirement: str | None = None
+    source_type: str | None = None
+    source_id: int | None = None
+    created_at: datetime
+    updated_at: datetime
+    closed_at: datetime | None = None
+    project_name: str | None = None
+    actions: list[IssueAction] = []
+    archive_check: dict[str, Any] | None = None
+
+
+class IssueArchiveCheckResponse(BaseModel):
+    issue_id: int
+    complete: bool
+    missing_items: list[str]
+    items: dict[str, bool]
+
+
+class IssueSummaryGroup(BaseModel):
+    label: str
+    count: int
+
+
+class IssueSummaryResponse(BaseModel):
+    pending_rectification_count: int
+    pending_review_count: int
+    overdue_count: int
+    due_today_count: int
+    closed_count: int
+    by_type: list[IssueSummaryGroup]
+    by_responsible_unit: list[IssueSummaryGroup]

@@ -525,6 +525,41 @@ p {
   color: #ffb4c0;
 }
 
+.issue-summary-card {
+  display: grid;
+  width: 100%;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 10px;
+  margin-top: 18px;
+  border: 1px solid rgba(79, 206, 255, 0.22);
+  border-radius: 16px;
+  padding: 14px;
+  color: var(--text);
+  background: rgba(6, 21, 38, 0.72);
+  text-align: left;
+}
+
+.issue-summary-card span {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  border: 1px solid rgba(79, 206, 255, 0.12);
+  border-radius: 12px;
+  padding: 10px;
+  color: var(--muted);
+  background: rgba(3, 16, 29, 0.5);
+}
+
+.issue-summary-card strong {
+  color: var(--text);
+  font-size: 20px;
+}
+
+.risk-text,
+.risk-text strong {
+  color: #ffb4c0 !important;
+}
+
 .page-stack {
   display: grid;
   gap: 18px;
@@ -675,6 +710,25 @@ p {
   background: rgba(255, 92, 119, 0.18);
 }
 
+.status-overdue {
+  color: #ffe0e6;
+  background: rgba(255, 92, 119, 0.18);
+}
+
+.status-notified,
+.status-replied,
+.status-pending_review,
+.status-reopened {
+  color: #e9e4ff;
+  background: rgba(140, 125, 255, 0.2);
+}
+
+.status-closed,
+.status-archived {
+  color: #d7ffea;
+  background: rgba(84, 226, 155, 0.18);
+}
+
 .small-action {
   min-height: 36px;
   padding: 0 12px;
@@ -743,6 +797,213 @@ p {
   background:
     linear-gradient(135deg, rgba(76, 20, 34, 0.72), rgba(5, 18, 33, 0.76)),
     radial-gradient(circle at 82% 20%, rgba(255, 92, 119, 0.16), transparent 28%);
+}
+
+.issue-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.issue-workbench {
+  display: grid;
+  grid-template-columns: minmax(420px, 0.95fr) minmax(0, 1.05fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.issue-list-panel,
+.issue-detail-panel {
+  display: grid;
+  gap: 16px;
+}
+
+.issue-toolbar {
+  display: grid;
+  gap: 12px;
+}
+
+.filter-row,
+.issue-search,
+.issue-action-buttons {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.filter-row select,
+.issue-search input {
+  min-height: 40px;
+  border: 1px solid var(--line);
+  border-radius: 12px;
+  padding: 0 12px;
+  color: var(--text);
+  outline: none;
+  background: rgba(3, 16, 29, 0.76);
+}
+
+.issue-search input {
+  min-width: 240px;
+  flex: 1;
+}
+
+.active-filter {
+  border-color: rgba(255, 155, 69, 0.5);
+  color: #ffe3c4;
+  background: rgba(255, 155, 69, 0.12);
+}
+
+.issue-create-form {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(79, 206, 255, 0.18);
+  border-radius: 16px;
+  padding: 16px;
+  background: rgba(4, 16, 30, 0.5);
+}
+
+.issue-list-cards {
+  display: grid;
+  gap: 12px;
+}
+
+.issue-card {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  border: 1px solid rgba(79, 206, 255, 0.18);
+  border-radius: 16px;
+  padding: 14px;
+  color: var(--text);
+  background: rgba(7, 23, 41, 0.72);
+  text-align: left;
+  transition:
+    border-color 0.2s ease,
+    transform 0.2s ease,
+    background 0.2s ease;
+}
+
+.issue-card:hover,
+.issue-card.selected {
+  border-color: var(--line-strong);
+  background: rgba(12, 38, 67, 0.86);
+  transform: translateY(-1px);
+}
+
+.issue-card > div {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+}
+
+.issue-card strong {
+  color: var(--text);
+  font-size: 16px;
+}
+
+.issue-card small {
+  color: var(--muted);
+  line-height: 1.5;
+}
+
+.issue-overdue {
+  border-color: rgba(255, 92, 119, 0.48) !important;
+  background: rgba(255, 92, 119, 0.1) !important;
+}
+
+.issue-major {
+  border-color: rgba(255, 155, 69, 0.5) !important;
+  box-shadow: 0 0 24px rgba(255, 155, 69, 0.1);
+}
+
+.issue-level {
+  display: inline-flex;
+  min-height: 26px;
+  align-items: center;
+  border-radius: 999px;
+  padding: 0 10px;
+  color: #dffbff;
+  background: rgba(43, 168, 255, 0.14);
+  font-size: 12px;
+}
+
+.level-urgent,
+.level-major {
+  color: #ffe3c4;
+  background: rgba(255, 155, 69, 0.18);
+}
+
+.issue-detail-head {
+  display: flex;
+  align-items: flex-start;
+  justify-content: space-between;
+  gap: 16px;
+}
+
+.issue-detail-head h2 {
+  margin-top: 8px;
+  color: var(--text);
+  font-size: 26px;
+}
+
+.issue-detail-head p {
+  margin-top: 8px;
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.issue-rectification {
+  display: grid;
+  gap: 8px;
+  border: 1px solid rgba(30, 232, 214, 0.18);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(30, 232, 214, 0.06);
+}
+
+.issue-rectification strong {
+  color: var(--cyan);
+}
+
+.issue-rectification p {
+  color: #cfe6f6;
+  line-height: 1.7;
+}
+
+.issue-action-box {
+  display: grid;
+  gap: 14px;
+  border: 1px solid rgba(79, 206, 255, 0.18);
+  border-radius: 16px;
+  padding: 16px;
+  background: rgba(4, 16, 30, 0.48);
+}
+
+.issue-timeline {
+  display: grid;
+  gap: 10px;
+  margin-top: 14px;
+}
+
+.timeline-item {
+  display: grid;
+  gap: 6px;
+  border-left: 2px solid rgba(30, 232, 214, 0.54);
+  padding: 10px 12px;
+  background: rgba(6, 21, 38, 0.52);
+}
+
+.timeline-item strong {
+  color: var(--text);
+}
+
+.timeline-item span {
+  color: #cfe6f6;
+  line-height: 1.55;
+}
+
+.timeline-item small {
+  color: var(--muted);
 }
 
 .warning-banner {
@@ -1388,7 +1649,8 @@ p {
   }
 
   .dashboard-metrics,
-  .dashboard-grid {
+  .dashboard-grid,
+  .issue-metrics {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
@@ -1398,6 +1660,7 @@ p {
 
   .upload-console,
   .inbox-row,
+  .issue-workbench,
   .quick-result-grid,
   .quick-created-list,
   .import-summary,
@@ -1431,6 +1694,9 @@ p {
   .status-grid,
     .dashboard-metrics,
     .dashboard-grid,
+    .issue-metrics,
+    .issue-workbench,
+    .issue-summary-card,
     .smart-entry-grid,
     .quick-field-grid,
     .quick-result-grid,
@@ -1457,6 +1723,8 @@ p {
 
   .page-header,
   .detail-head,
+  .issue-detail-head,
+  .issue-search,
   .quick-console-footer,
   .publish-bar {
     align-items: stretch;

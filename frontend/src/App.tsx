@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   ChevronRight,
   ClipboardList,
+  ClipboardCheck,
   FileUp,
   FileText,
   Gauge,
@@ -30,9 +31,15 @@ import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useMemo, u
 import {
   analyzeQuickRecord,
   analyzeProgressImport,
+  closeIssue,
   confirmQuickRecord,
+  createIssue,
   createProject,
   deleteProject,
+  fetchIssue,
+  fetchIssueArchiveCheck,
+  fetchIssues,
+  fetchIssueSummary,
   fetchImportBatch,
   fetchProject,
   fetchProjects,
@@ -40,12 +47,21 @@ import {
   fetchProgressDelayAnalysis,
   fetchProgressOverview,
   fetchSmartInbox,
+  notifyIssue,
   publishProgressImport,
+  reopenIssue,
+  replyIssue,
+  reviewIssue,
   uploadSmartInboxFile,
   validateProgressImport,
 } from "./api";
 import type {
   FieldMapping,
+  Issue,
+  IssueActionPayload,
+  IssueArchiveCheck,
+  IssueInput,
+  IssueSummary,
   ProgressDataQuality,
   ProgressDelayAnalysis,
   ProgressDelayedTask,
@@ -67,6 +83,7 @@ type View =
   | { name: "progress-import"; batchId: number }
   | { name: "progress-dashboard" }
   | { name: "quick-record" }
+  | { name: "issues" }
   | { name: "new-project" }
   | { name: "project-detail"; projectId: number };
 
@@ -94,6 +111,7 @@ function App() {
   const [projects, setProjects] = useState<Project[]>([]);
   const [inboxItems, setInboxItems] = useState<SmartInboxItem[]>([]);
   const [homeProgressOverview, setHomeProgressOverview] = useState<ProgressOverview | null>(null);
+  const [homeIssueSummary, setHomeIssueSummary] = useState<IssueSummary | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [projectError, setProjectError] = useState("");
@@ -143,19 +161,22 @@ function App() {
     const projectId = projects[0]?.id;
     if (!projectId) {
       setHomeProgressOverview(null);
+      setHomeIssueSummary(null);
       return;
     }
 
     let active = true;
-    fetchProgressOverview(projectId)
-      .then((overview) => {
+    Promise.allSettled([fetchProgressOverview(projectId), fetchIssueSummary(projectId)])
+      .then(([progressResult, issueResult]) => {
         if (active) {
-          setHomeProgressOverview(overview);
+          setHomeProgressOverview(progressResult.status === "fulfilled" ? progressResult.value : null);
+          setHomeIssueSummary(issueResult.status === "fulfilled" ? issueResult.value : null);
         }
       })
       .catch(() => {
         if (active) {
           setHomeProgressOverview(null);
+          setHomeIssueSummary(null);
         }
       });
 
@@ -222,6 +243,14 @@ function App() {
         >
           <MessageSquareText size={20} />
         </button>
+        <button
+          className={view.name === "issues" ? "rail-button active" : "rail-button"}
+          type="button"
+          onClick={() => navigate({ name: "issues" })}
+          title="问题闭环"
+        >
+          <ClipboardCheck size={20} />
+        </button>
       </aside>
 
       <section className="workspace">
@@ -231,11 +260,13 @@ function App() {
             projects={projects}
             inboxItems={inboxItems}
             progressOverview={homeProgressOverview}
+            issueSummary={homeIssueSummary}
             onOpenProjects={() => navigate({ name: "projects" })}
             onNewProject={() => navigate({ name: "new-project" })}
             onOpenInbox={() => navigate({ name: "smart-inbox" })}
             onOpenProgressDashboard={() => navigate({ name: "progress-dashboard" })}
             onOpenQuickRecord={() => navigate({ name: "quick-record" })}
+            onOpenIssues={() => navigate({ name: "issues" })}
           />
         )}
         {view.name === "smart-inbox" && (
@@ -268,6 +299,12 @@ function App() {
         )}
         {view.name === "quick-record" && (
           <QuickRecordView
+            projects={projects}
+            onNewProject={() => navigate({ name: "new-project" })}
+          />
+        )}
+        {view.name === "issues" && (
+          <IssuesView
             projects={projects}
             onNewProject={() => navigate({ name: "new-project" })}
           />
@@ -311,11 +348,13 @@ interface HomeViewProps {
   projects: Project[];
   inboxItems: SmartInboxItem[];
   progressOverview: ProgressOverview | null;
+  issueSummary: IssueSummary | null;
   onOpenProjects: () => void;
   onNewProject: () => void;
   onOpenInbox: () => void;
   onOpenProgressDashboard: () => void;
   onOpenQuickRecord: () => void;
+  onOpenIssues: () => void;
 }
 
 function HomeView({
@@ -323,11 +362,13 @@ function HomeView({
   projects,
   inboxItems,
   progressOverview,
+  issueSummary,
   onOpenProjects,
   onNewProject,
   onOpenInbox,
   onOpenProgressDashboard,
   onOpenQuickRecord,
+  onOpenIssues,
 }: HomeViewProps) {
   const activeCount = projects.filter((project) => project.status === "active").length;
   const pendingItems = inboxItems.filter((item) => item.status === "pending");
@@ -342,10 +383,10 @@ function HomeView({
         <div className="hero-copy">
           <div className="eyebrow">
             <Sparkles size={16} />
-            阶段 5 一句话现场记录
+            阶段 6 问题闭环
           </div>
           <h1>智能工程监理工作台</h1>
-          <p>输入一句现场情况，系统自动识别楼栋、楼层、专业和问题类型，生成巡视记录、问题草稿与日志素材。</p>
+          <p>统一管理质量、安全、进度和资料问题，从通知、回复、复查到关闭形成可追踪闭环。</p>
           <div className="hero-actions">
             <button className="primary-button" type="button" onClick={onOpenInbox}>
               <UploadCloud size={18} />
@@ -362,6 +403,10 @@ function HomeView({
             <button className="ghost-button" type="button" onClick={onOpenProgressDashboard}>
               <BarChart3 size={18} />
               进度看板
+            </button>
+            <button className="ghost-button" type="button" onClick={onOpenIssues}>
+              <ClipboardCheck size={18} />
+              问题闭环
             </button>
           </div>
         </div>
@@ -451,6 +496,26 @@ function HomeView({
         )}
       </section>
 
+      <section className="panel issue-summary-panel">
+        <div className="panel-title">
+          <ClipboardCheck size={20} />
+          <div>
+            <h2>问题闭环</h2>
+            <span>{issueSummary ? `${issueSummary.overdue_count} 项逾期` : "暂无问题摘要"}</span>
+          </div>
+        </div>
+        {issueSummary ? (
+          <button className="issue-summary-card" type="button" onClick={onOpenIssues}>
+            <span>待整改 <strong>{issueSummary.pending_rectification_count}</strong></span>
+            <span>待复查 <strong>{issueSummary.pending_review_count}</strong></span>
+            <span className={issueSummary.overdue_count > 0 ? "risk-text" : ""}>逾期 <strong>{issueSummary.overdue_count}</strong></span>
+            <span>今日到期 <strong>{issueSummary.due_today_count}</strong></span>
+          </button>
+        ) : (
+          <EmptyLine text="新增问题后，这里会显示闭环摘要。" />
+        )}
+      </section>
+
       <section className="panel ai-panel">
         <div className="panel-title">
           <Sparkles size={20} />
@@ -464,7 +529,7 @@ function HomeView({
 
       <section className="status-grid">
         <StatusCard icon={<Gauge size={22} />} title="进度状态" value={progressValue} tone="blue" note={progressHint} />
-        <StatusCard icon={<CheckCircle2 size={22} />} title="质量状态" value="待接入" tone="cyan" />
+        <StatusCard icon={<CheckCircle2 size={22} />} title="质量状态" value={issueSummary ? `${issueSummary.pending_rectification_count} 待改` : "待接入"} tone="cyan" />
         <StatusCard icon={<ShieldCheck size={22} />} title="安全状态" value="待接入" tone="green" />
         <StatusCard icon={<FileText size={22} />} title="资料状态" value="待接入" tone="violet" />
       </section>
@@ -501,6 +566,61 @@ const quickActionLabels: Record<string, string> = {
   create_patrol: "生成巡视记录",
   create_issue: "生成问题草稿",
   write_diary_material: "写入日志素材",
+};
+
+const issueTypeLabels: Record<string, string> = {
+  quality: "质量",
+  safety: "安全",
+  progress: "进度",
+  document: "资料",
+  drawing: "图纸",
+  other: "其他",
+};
+
+const issueLevelLabels: Record<string, string> = {
+  normal: "普通",
+  important: "重要",
+  urgent: "紧急",
+  major: "重大",
+};
+
+const issueStatusLabels: Record<string, string> = {
+  pending_rectification: "待整改",
+  notified: "已通知",
+  replied: "已回复",
+  pending_review: "待复查",
+  closed: "已关闭",
+  archived: "已归档",
+  overdue: "已逾期",
+  rejected: "已驳回",
+  reopened: "重新打开",
+};
+
+const issueActionLabels: Record<string, string> = {
+  create: "创建",
+  notify: "通知",
+  reply: "回复",
+  review: "复查",
+  close: "关闭",
+  reopen: "重开",
+  archive: "归档",
+  reject: "驳回",
+};
+
+const emptyIssueForm = {
+  issue_type: "quality",
+  level: "normal",
+  title: "",
+  description: "",
+  building: "",
+  floor: "",
+  area: "",
+  discipline: "",
+  responsible_unit: "",
+  discovered_by: "",
+  discovered_date: "",
+  deadline: "",
+  rectification_requirement: "",
 };
 
 function ProgressDashboardView({
@@ -976,6 +1096,489 @@ function normalizeQuickFields(fields: QuickRecordConfirmFields): QuickRecordConf
   return Object.fromEntries(
     Object.entries(fields).map(([key, value]) => [key, value === "" ? null : value]),
   ) as QuickRecordConfirmFields;
+}
+
+function IssuesView({ projects, onNewProject }: { projects: Project[]; onNewProject: () => void }) {
+  const [selectedProjectId, setSelectedProjectId] = useState<number | "">(projects[0]?.id ?? "");
+  const [issues, setIssues] = useState<Issue[]>([]);
+  const [summary, setSummary] = useState<IssueSummary | null>(null);
+  const [selectedIssue, setSelectedIssue] = useState<Issue | null>(null);
+  const [archiveCheck, setArchiveCheck] = useState<IssueArchiveCheck | null>(null);
+  const [filters, setFilters] = useState({ issue_type: "", status: "", keyword: "", overdueOnly: false });
+  const [showCreate, setShowCreate] = useState(false);
+  const [form, setForm] = useState(emptyIssueForm);
+  const [actionText, setActionText] = useState("");
+  const [operator, setOperator] = useState("");
+  const [loading, setLoading] = useState(false);
+  const [working, setWorking] = useState(false);
+  const [error, setError] = useState("");
+  const [message, setMessage] = useState("");
+
+  useEffect(() => {
+    if (!selectedProjectId && projects[0]?.id) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects, selectedProjectId]);
+
+  async function loadIssues(issueIdToKeep?: number) {
+    if (!selectedProjectId) {
+      return;
+    }
+    setLoading(true);
+    setError("");
+    try {
+      const statusFilter = filters.overdueOnly ? "overdue" : filters.status;
+      const [items, nextSummary] = await Promise.all([
+        fetchIssues({
+          project_id: Number(selectedProjectId),
+          issue_type: filters.issue_type,
+          status: statusFilter,
+          keyword: filters.keyword,
+        }),
+        fetchIssueSummary(Number(selectedProjectId)),
+      ]);
+      setIssues(items);
+      setSummary(nextSummary);
+      const nextSelectedId = issueIdToKeep ?? selectedIssue?.id;
+      if (nextSelectedId) {
+        const refreshed = items.find((item) => item.id === nextSelectedId);
+        setSelectedIssue(refreshed ? await fetchIssue(refreshed.id) : null);
+      }
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "问题列表加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadIssues();
+  }, [selectedProjectId, filters.issue_type, filters.status, filters.overdueOnly]);
+
+  async function openIssue(issue: Issue) {
+    setError("");
+    setMessage("");
+    setArchiveCheck(null);
+    try {
+      setSelectedIssue(await fetchIssue(issue.id));
+    } catch (detailError) {
+      setError(detailError instanceof Error ? detailError.message : "问题详情加载失败");
+    }
+  }
+
+  function updateIssueForm(field: keyof typeof emptyIssueForm, value: string) {
+    setForm((current) => ({ ...current, [field]: value }));
+  }
+
+  async function handleCreateIssue(event: FormEvent) {
+    event.preventDefault();
+    if (!selectedProjectId) {
+      setError("请先选择项目。");
+      return;
+    }
+    setWorking(true);
+    setError("");
+    setMessage("");
+    try {
+      const payload: IssueInput = {
+        project_id: Number(selectedProjectId),
+        ...form,
+        status: "pending_rectification",
+      };
+      const created = await createIssue(payload);
+      setForm(emptyIssueForm);
+      setShowCreate(false);
+      setMessage("问题已创建。");
+      await loadIssues(created.id);
+      setSelectedIssue(await fetchIssue(created.id));
+    } catch (createError) {
+      setError(createError instanceof Error ? createError.message : "问题创建失败");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function runIssueAction(kind: "notify" | "reply" | "review" | "close" | "reopen") {
+    if (!selectedIssue) {
+      return;
+    }
+    if (!actionText.trim()) {
+      setError("请填写操作内容。");
+      return;
+    }
+    setWorking(true);
+    setError("");
+    setMessage("");
+    try {
+      const payload: IssueActionPayload = {
+        content: actionText.trim(),
+        operator: operator || null,
+      };
+      const result =
+        kind === "notify"
+          ? await notifyIssue(selectedIssue.id, payload)
+          : kind === "reply"
+            ? await replyIssue(selectedIssue.id, { ...payload, mark_pending_review: true })
+            : kind === "review"
+              ? await reviewIssue(selectedIssue.id, { ...payload, close_issue: false })
+              : kind === "close"
+                ? await closeIssue(selectedIssue.id, payload)
+                : await reopenIssue(selectedIssue.id, payload);
+      setSelectedIssue(result);
+      setActionText("");
+      setMessage(`${issueActionVerb(kind)}已记录。`);
+      await loadIssues(result.id);
+    } catch (actionError) {
+      setError(actionError instanceof Error ? actionError.message : "操作失败");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handleArchiveCheck() {
+    if (!selectedIssue) {
+      return;
+    }
+    setWorking(true);
+    setError("");
+    try {
+      setArchiveCheck(await fetchIssueArchiveCheck(selectedIssue.id));
+    } catch (checkError) {
+      setError(checkError instanceof Error ? checkError.message : "资料完整度检查失败");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  function handleKeywordSubmit(event: FormEvent) {
+    event.preventDefault();
+    void loadIssues();
+  }
+
+  const noProjects = projects.length === 0;
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="阶段 6"
+        title="问题闭环"
+        description="统一管理质量、安全、进度和资料问题，跟踪通知、回复、复查、关闭和资料完整度。"
+        action={
+          noProjects ? (
+            <button className="primary-button" type="button" onClick={onNewProject}>
+              <Plus size={18} />
+              新建项目
+            </button>
+          ) : (
+            <label className="field compact-field dashboard-project-select" htmlFor="issues-project">
+              <span>当前项目</span>
+              <select
+                id="issues-project"
+                value={selectedProjectId}
+                onChange={(event) => setSelectedProjectId(Number(event.target.value))}
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )
+        }
+      />
+
+      {noProjects && (
+        <section className="panel">
+          <EmptyState title="暂无项目" text="先新建项目，再创建和跟踪问题闭环。" />
+        </section>
+      )}
+
+      {!noProjects && (
+        <>
+          {summary && (
+            <section className="issue-metrics">
+              <MetricCard title="待整改" value={String(summary.pending_rectification_count)} hint="待整改/已通知/重开" tone="blue" />
+              <MetricCard title="待复查" value={String(summary.pending_review_count)} hint="已回复或待复查" tone="cyan" />
+              <MetricCard title="逾期" value={String(summary.overdue_count)} hint="超过整改期限" tone={summary.overdue_count > 0 ? "risk" : "green"} />
+              <MetricCard title="今日到期" value={String(summary.due_today_count)} hint={`已关闭 ${summary.closed_count}`} tone="violet" />
+            </section>
+          )}
+
+          <section className="issue-workbench">
+            <section className="panel issue-list-panel">
+              <div className="issue-toolbar">
+                <div className="filter-row">
+                  <select value={filters.issue_type} onChange={(event) => setFilters((current) => ({ ...current, issue_type: event.target.value }))}>
+                    <option value="">全部类型</option>
+                    {Object.entries(issueTypeLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <select value={filters.status} onChange={(event) => setFilters((current) => ({ ...current, status: event.target.value, overdueOnly: false }))}>
+                    <option value="">全部状态</option>
+                    {Object.entries(issueStatusLabels).map(([value, label]) => (
+                      <option key={value} value={value}>
+                        {label}
+                      </option>
+                    ))}
+                  </select>
+                  <button
+                    className={filters.overdueOnly ? "icon-text-button active-filter" : "icon-text-button"}
+                    type="button"
+                    onClick={() => setFilters((current) => ({ ...current, overdueOnly: !current.overdueOnly, status: "" }))}
+                  >
+                    <AlertTriangle size={16} />
+                    逾期
+                  </button>
+                </div>
+                <form className="issue-search" onSubmit={handleKeywordSubmit}>
+                  <input
+                    value={filters.keyword}
+                    placeholder="搜索标题、描述、整改要求"
+                    onChange={(event) => setFilters((current) => ({ ...current, keyword: event.target.value }))}
+                  />
+                  <button className="icon-text-button" type="submit">
+                    搜索
+                  </button>
+                  <button className="primary-button" type="button" onClick={() => setShowCreate((current) => !current)}>
+                    <Plus size={18} />
+                    新增问题
+                  </button>
+                </form>
+              </div>
+
+              {error && <div className="error-banner">{error}</div>}
+              {message && <div className="success-banner">{message}</div>}
+
+              {showCreate && (
+                <form className="issue-create-form" onSubmit={handleCreateIssue}>
+                  <div className="quick-field-grid">
+                    <label className="field" htmlFor="issue-type">
+                      <span>类型</span>
+                      <select id="issue-type" value={form.issue_type} onChange={(event) => updateIssueForm("issue_type", event.target.value)}>
+                        {Object.entries(issueTypeLabels).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <label className="field" htmlFor="issue-level">
+                      <span>等级</span>
+                      <select id="issue-level" value={form.level} onChange={(event) => updateIssueForm("level", event.target.value)}>
+                        {Object.entries(issueLevelLabels).map(([value, label]) => (
+                          <option key={value} value={value}>
+                            {label}
+                          </option>
+                        ))}
+                      </select>
+                    </label>
+                    <QuickInput label="标题" value={form.title} onChange={(value) => updateIssueForm("title", value)} />
+                    <QuickInput label="责任单位" value={form.responsible_unit} onChange={(value) => updateIssueForm("responsible_unit", value)} />
+                    <QuickInput label="楼栋" value={form.building} onChange={(value) => updateIssueForm("building", value)} />
+                    <QuickInput label="楼层" value={form.floor} onChange={(value) => updateIssueForm("floor", value)} />
+                    <QuickInput label="专业" value={form.discipline} onChange={(value) => updateIssueForm("discipline", value)} />
+                    <QuickInput label="整改期限" type="date" value={form.deadline} onChange={(value) => updateIssueForm("deadline", value)} />
+                  </div>
+                  <QuickTextarea label="问题描述" value={form.description} onChange={(value) => updateIssueForm("description", value)} />
+                  <QuickTextarea label="整改要求" value={form.rectification_requirement} onChange={(value) => updateIssueForm("rectification_requirement", value)} />
+                  <div className="form-actions">
+                    <button className="ghost-button" type="button" onClick={() => setShowCreate(false)}>
+                      取消
+                    </button>
+                    <button className="primary-button" type="submit" disabled={working}>
+                      <Save size={18} />
+                      保存问题
+                    </button>
+                  </div>
+                </form>
+              )}
+
+              <div className="issue-list-cards">
+                {loading && <EmptyLine text="正在加载问题列表..." />}
+                {!loading && issues.length === 0 && <EmptyState title="暂无问题" text="点击新增问题，或从一句话现场记录生成问题草稿。" />}
+                {issues.map((issue) => (
+                  <button
+                    className={`issue-card ${issueTone(issue)} ${selectedIssue?.id === issue.id ? "selected" : ""}`}
+                    key={issue.id}
+                    type="button"
+                    onClick={() => void openIssue(issue)}
+                  >
+                    <div>
+                      <span className={`issue-level level-${issue.level}`}>{issueLevelLabels[issue.level] ?? issue.level}</span>
+                      <span className={`status-pill status-${issue.effective_status}`}>{issueStatusLabels[issue.effective_status] ?? issue.effective_status}</span>
+                    </div>
+                    <strong>{issue.title}</strong>
+                    <small>
+                      {issueTypeLabels[issue.issue_type] ?? issue.issue_type} · {issue.building || "未填楼栋"} · {issue.responsible_unit || "未填责任单位"}
+                    </small>
+                    <small>期限：{issue.deadline || "未设置"}</small>
+                  </button>
+                ))}
+              </div>
+            </section>
+
+            <IssueDetailPanel
+              issue={selectedIssue}
+              archiveCheck={archiveCheck}
+              actionText={actionText}
+              operator={operator}
+              working={working}
+              onActionTextChange={setActionText}
+              onOperatorChange={setOperator}
+              onRunAction={runIssueAction}
+              onArchiveCheck={handleArchiveCheck}
+            />
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+function IssueDetailPanel({
+  issue,
+  archiveCheck,
+  actionText,
+  operator,
+  working,
+  onActionTextChange,
+  onOperatorChange,
+  onRunAction,
+  onArchiveCheck,
+}: {
+  issue: Issue | null;
+  archiveCheck: IssueArchiveCheck | null;
+  actionText: string;
+  operator: string;
+  working: boolean;
+  onActionTextChange: (value: string) => void;
+  onOperatorChange: (value: string) => void;
+  onRunAction: (kind: "notify" | "reply" | "review" | "close" | "reopen") => Promise<void>;
+  onArchiveCheck: () => Promise<void>;
+}) {
+  if (!issue) {
+    return (
+      <section className="panel issue-detail-panel">
+        <EmptyState title="选择问题" text="从左侧列表选择问题后，可查看详情和执行闭环操作。" />
+      </section>
+    );
+  }
+
+  return (
+    <section className={`panel issue-detail-panel ${issueTone(issue)}`}>
+      <div className="issue-detail-head">
+        <div>
+          <span className="eyebrow">ISSUE #{issue.id}</span>
+          <h2>{issue.title}</h2>
+          <p>{issue.description}</p>
+        </div>
+        <span className={`status-pill status-${issue.effective_status}`}>{issueStatusLabels[issue.effective_status] ?? issue.effective_status}</span>
+      </div>
+
+      <div className="detail-grid">
+        <Info label="类型" value={issueTypeLabels[issue.issue_type] ?? issue.issue_type} />
+        <Info label="等级" value={issueLevelLabels[issue.level] ?? issue.level} />
+        <Info label="责任单位" value={issue.responsible_unit} />
+        <Info label="整改期限" value={issue.deadline} />
+        <Info label="楼栋楼层" value={`${issue.building || "未填"} ${issue.floor || ""}`.trim()} />
+        <Info label="专业" value={issue.discipline} />
+      </div>
+
+      <section className="issue-rectification">
+        <strong>整改要求</strong>
+        <p>{issue.rectification_requirement || "未填写整改要求。"}</p>
+      </section>
+
+      <div className="issue-action-box">
+        <div className="quick-field-grid">
+          <QuickInput label="操作人" value={operator} onChange={onOperatorChange} />
+        </div>
+        <QuickTextarea label="操作内容" value={actionText} onChange={onActionTextChange} />
+        <div className="issue-action-buttons">
+          <button className="icon-text-button" type="button" disabled={working || !canNotify(issue)} onClick={() => void onRunAction("notify")}>
+            通知
+          </button>
+          <button className="icon-text-button" type="button" disabled={working || !canReply(issue)} onClick={() => void onRunAction("reply")}>
+            登记回复
+          </button>
+          <button className="icon-text-button" type="button" disabled={working || !canReview(issue)} onClick={() => void onRunAction("review")}>
+            登记复查
+          </button>
+          <button className="danger-button" type="button" disabled={working} onClick={() => void onRunAction("close")}>
+            关闭问题
+          </button>
+          <button className="ghost-button" type="button" disabled={working || !canReopen(issue)} onClick={() => void onRunAction("reopen")}>
+            重新打开
+          </button>
+          <button className="ghost-button" type="button" disabled={working} onClick={() => void onArchiveCheck()}>
+            完整度检查
+          </button>
+        </div>
+      </div>
+
+      {archiveCheck && (
+        <div className={archiveCheck.complete ? "success-banner" : "warning-banner"}>
+          {archiveCheck.complete ? "闭环资料完整。" : `闭环资料缺失：${archiveCheck.missing_items.join("、")}`}
+        </div>
+      )}
+
+      <section>
+        <div className="list-toolbar">
+          <span>流转记录</span>
+          <span className="muted-note">{issue.actions.length} 条</span>
+        </div>
+        <div className="issue-timeline">
+          {issue.actions.map((action) => (
+            <article className="timeline-item" key={action.id}>
+              <strong>{issueActionLabels[action.action_type] ?? action.action_type}</strong>
+              <span>{action.content || "无内容"}</span>
+              <small>{action.operator || "未记录操作人"} · {action.action_date}</small>
+            </article>
+          ))}
+        </div>
+      </section>
+    </section>
+  );
+}
+
+function issueActionVerb(kind: string): string {
+  return {
+    notify: "通知",
+    reply: "整改回复",
+    review: "复查意见",
+    close: "关闭操作",
+    reopen: "重新打开",
+  }[kind] ?? "操作";
+}
+
+function issueTone(issue: Issue): string {
+  if (issue.effective_status === "overdue") {
+    return "issue-overdue";
+  }
+  if (issue.level === "major" || issue.level === "urgent") {
+    return "issue-major";
+  }
+  return "";
+}
+
+function canNotify(issue: Issue): boolean {
+  return ["pending_rectification", "reopened", "overdue"].includes(issue.effective_status);
+}
+
+function canReply(issue: Issue): boolean {
+  return ["pending_rectification", "notified", "reopened", "overdue"].includes(issue.effective_status);
+}
+
+function canReview(issue: Issue): boolean {
+  return ["replied", "pending_review"].includes(issue.status);
+}
+
+function canReopen(issue: Issue): boolean {
+  return ["closed", "archived", "rejected"].includes(issue.status);
 }
 
 function SummaryList({ items }: { items: ProgressSummaryItem[] }) {

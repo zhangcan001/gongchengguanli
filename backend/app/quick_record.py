@@ -5,6 +5,7 @@ from datetime import date
 from typing import Any
 
 from .errors import ErrorCode
+from .issues import record_issue_action
 from .models import QuickRecordAnalyzeRequest, QuickRecordConfirmRequest
 from .repositories import RepositoryError
 
@@ -223,6 +224,14 @@ class QuickRecordService:
                     discovered_date=patrol_date,
                     deadline=fields.deadline,
                     rectification_requirement=rectification_requirement,
+                )
+                record_issue_action(
+                    self.connection,
+                    issue_id=issue_id,
+                    action_type="create",
+                    content=f"一句话记录创建问题：{description}",
+                    operator=fields.discovered_by or fields.patrol_person,
+                    action_date=patrol_date,
                 )
 
             if "create_patrol" in actions:

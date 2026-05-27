@@ -1,5 +1,11 @@
 import type {
   FieldMapping,
+  Issue,
+  IssueAction,
+  IssueActionPayload,
+  IssueArchiveCheck,
+  IssueInput,
+  IssueSummary,
   ProgressDataQuality,
   ProgressDelayAnalysis,
   ProgressImportAnalyzeResult,
@@ -156,8 +162,90 @@ export async function confirmQuickRecord(
   });
 }
 
+export interface IssueFilters {
+  project_id?: number;
+  issue_type?: string;
+  status?: string;
+  building?: string;
+  discipline?: string;
+  deadline_from?: string;
+  deadline_to?: string;
+  keyword?: string;
+}
+
+export async function fetchIssues(filters: IssueFilters = {}): Promise<Issue[]> {
+  const query = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+  const suffix = query.toString() ? `?${query.toString()}` : "";
+  return request<Issue[]>(`/api/issues${suffix}`);
+}
+
+export async function fetchIssue(issueId: number): Promise<Issue> {
+  return request<Issue>(`/api/issues/${issueId}`);
+}
+
+export async function createIssue(payload: IssueInput): Promise<Issue> {
+  return request<Issue>("/api/issues", {
+    method: "POST",
+    body: JSON.stringify(normalizeObject(payload)),
+  });
+}
+
+export async function updateIssue(issueId: number, payload: Partial<IssueInput>): Promise<Issue> {
+  return request<Issue>(`/api/issues/${issueId}`, {
+    method: "PUT",
+    body: JSON.stringify(normalizeObject(payload)),
+  });
+}
+
+export async function notifyIssue(issueId: number, payload: IssueActionPayload): Promise<Issue> {
+  return issueAction(`/api/issues/${issueId}/notify`, payload);
+}
+
+export async function replyIssue(issueId: number, payload: IssueActionPayload): Promise<Issue> {
+  return issueAction(`/api/issues/${issueId}/reply`, payload);
+}
+
+export async function reviewIssue(issueId: number, payload: IssueActionPayload): Promise<Issue> {
+  return issueAction(`/api/issues/${issueId}/review`, payload);
+}
+
+export async function closeIssue(issueId: number, payload: IssueActionPayload): Promise<Issue> {
+  return issueAction(`/api/issues/${issueId}/close`, payload);
+}
+
+export async function reopenIssue(issueId: number, payload: IssueActionPayload): Promise<Issue> {
+  return issueAction(`/api/issues/${issueId}/reopen`, payload);
+}
+
+export async function fetchIssueActions(issueId: number): Promise<IssueAction[]> {
+  return request<IssueAction[]>(`/api/issues/${issueId}/actions`);
+}
+
+export async function fetchIssueArchiveCheck(issueId: number): Promise<IssueArchiveCheck> {
+  return request<IssueArchiveCheck>(`/api/issues/${issueId}/archive-check`);
+}
+
+export async function fetchIssueSummary(projectId?: number): Promise<IssueSummary> {
+  const query = projectId ? `?project_id=${projectId}` : "";
+  return request<IssueSummary>(`/api/issues/summary${query}`);
+}
+
+function issueAction(path: string, payload: IssueActionPayload): Promise<Issue> {
+  return request<Issue>(path, {
+    method: "POST",
+    body: JSON.stringify(normalizeObject(payload)),
+  });
+}
+
 function normalizePayload<T extends Partial<ProjectInput>>(payload: T): Partial<ProjectInput> {
-  return Object.fromEntries(
-    Object.entries(payload).map(([key, value]) => [key, value === "" ? null : value]),
-  ) as Partial<ProjectInput>;
+  return normalizeObject(payload) as Partial<ProjectInput>;
+}
+
+function normalizeObject<T extends object>(payload: T): Partial<T> {
+  return Object.fromEntries(Object.entries(payload).map(([key, value]) => [key, value === "" ? null : value])) as Partial<T>;
 }

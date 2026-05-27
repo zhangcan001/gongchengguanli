@@ -158,6 +158,20 @@ CREATE TABLE IF NOT EXISTS issue (
 """
 
 
+ISSUE_ACTION_TABLE_SQL = """
+CREATE TABLE IF NOT EXISTS issue_action (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    issue_id INTEGER NOT NULL,
+    action_type TEXT NOT NULL,
+    content TEXT,
+    operator TEXT,
+    action_date TEXT NOT NULL,
+    created_at TEXT NOT NULL DEFAULT (datetime('now')),
+    FOREIGN KEY (issue_id) REFERENCES issue(id)
+);
+"""
+
+
 PATROL_RECORD_TABLE_SQL = """
 CREATE TABLE IF NOT EXISTS patrol_record (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -214,6 +228,7 @@ def initialize_database(settings: Settings) -> None:
         connection.execute(FIELD_MAPPING_TABLE_SQL)
         connection.execute(PROGRESS_RECORD_TABLE_SQL)
         connection.execute(ISSUE_TABLE_SQL)
+        connection.execute(ISSUE_ACTION_TABLE_SQL)
         connection.execute(PATROL_RECORD_TABLE_SQL)
         connection.execute(DIARY_MATERIAL_TABLE_SQL)
         connection.commit()

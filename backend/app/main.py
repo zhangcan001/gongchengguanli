@@ -2,6 +2,8 @@ import sqlite3
 from contextlib import asynccontextmanager
 from collections.abc import Iterator
 
+from datetime import date
+
 from fastapi import Depends, FastAPI, File, Form, HTTPException, Query, Response, UploadFile, status
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -10,6 +12,16 @@ from .database import get_connection, initialize_database
 from .errors import ErrorCode
 from .models import (
     HealthResponse,
+    Issue,
+    IssueAction,
+    IssueActionInput,
+    IssueArchiveCheckResponse,
+    IssueCloseRequest,
+    IssueCreate,
+    IssueReplyRequest,
+    IssueReviewRequest,
+    IssueSummaryResponse,
+    IssueUpdate,
     ProgressDataQualityResponse,
     ProgressDelayAnalysisResponse,
     ProgressImportAnalyzeRequest,
@@ -29,6 +41,7 @@ from .models import (
     SmartInboxItem,
     SmartInboxUploadResponse,
 )
+from .issues import IssueService
 from .progress_analytics import ProgressAnalyticsService
 from .progress_import import (
     analyze_progress_import,
@@ -92,6 +105,14 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code, "message": error.message})
         if error.code == ErrorCode.IMPORT_BATCH_ALREADY_PUBLISHED:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.ISSUE_NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.INVALID_ISSUE_VALUE:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.INVALID_ISSUE_STATUS_TRANSITION:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.ISSUE_REVIEW_REQUIRED:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": error.code, "message": error.message})
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"code": "UNKNOWN_ERROR", "message": "Unknown error."})
 
     @app.get("/api/health", response_model=HealthResponse)
@@ -244,6 +265,148 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         try:
             return ProgressAnalyticsService(connection).get_data_quality(project_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/issues/summary", response_model=IssueSummaryResponse)
+    def api_issue_summary(
+        project_id: int | None = Query(default=None),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return IssueService(connection).summary(project_id=project_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/issues", response_model=list[Issue])
+    def api_list_issues(
+        project_id: int | None = Query(default=None),
+        issue_type: str | None = Query(default=None),
+        status: str | None = Query(default=None),
+        building: str | None = Query(default=None),
+        discipline: str | None = Query(default=None),
+        deadline_from: date | None = Query(default=None),
+        deadline_to: date | None = Query(default=None),
+        keyword: str | None = Query(default=None),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> list[dict]:
+        try:
+            return IssueService(connection).list_issues(
+                project_id=project_id,
+                issue_type=issue_type,
+                status=status,
+                building=building,
+                discipline=discipline,
+                deadline_from=deadline_from,
+                deadline_to=deadline_to,
+                keyword=keyword,
+            )
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/issues", response_model=Issue, status_code=status.HTTP_201_CREATED)
+    def api_create_issue(
+        payload: IssueCreate,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return IssueService(connection).create_issue(payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/issues/{issue_id}", response_model=Issue)
+    def api_get_issue(
+        issue_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return IssueService(connection).get_issue(issue_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.put("/api/issues/{issue_id}", response_model=Issue)
+    def api_update_issue(
+        issue_id: int,
+        payload: IssueUpdate,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return IssueService(connection).update_issue(issue_id, payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/issues/{issue_id}/notify", response_model=Issue)
+    def api_notify_issue(
+        issue_id: int,
+        payload: IssueActionInput,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return IssueService(connection).notify_issue(issue_id, payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/issues/{issue_id}/reply", response_model=Issue)
+    def api_reply_issue(
+        issue_id: int,
+        payload: IssueReplyRequest,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return IssueService(connection).reply_issue(issue_id, payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/issues/{issue_id}/review", response_model=Issue)
+    def api_review_issue(
+        issue_id: int,
+        payload: IssueReviewRequest,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return IssueService(connection).review_issue(issue_id, payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/issues/{issue_id}/close", response_model=Issue)
+    def api_close_issue(
+        issue_id: int,
+        payload: IssueCloseRequest,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return IssueService(connection).close_issue(issue_id, payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/issues/{issue_id}/reopen", response_model=Issue)
+    def api_reopen_issue(
+        issue_id: int,
+        payload: IssueActionInput,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return IssueService(connection).reopen_issue(issue_id, payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/issues/{issue_id}/actions", response_model=list[IssueAction])
+    def api_list_issue_actions(
+        issue_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> list[dict]:
+        try:
+            return IssueService(connection).list_actions(issue_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/issues/{issue_id}/archive-check", response_model=IssueArchiveCheckResponse)
+    def api_issue_archive_check(
+        issue_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return IssueService(connection).archive_check(issue_id)
         except RepositoryError as error:
             handle_repository_error(error)
 
