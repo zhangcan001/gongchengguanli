@@ -5,6 +5,7 @@ import {
   Bot,
   Building2,
   CalendarDays,
+  Camera,
   CheckCircle2,
   ChevronRight,
   ClipboardList,
@@ -258,9 +259,12 @@ function App() {
 
   return (
     <main className="app-shell">
-      <div className="aurora aurora-one" />
-      <div className="aurora aurora-two" />
-      <aside className="side-rail">
+      <a className="skip-link" href="#workspace-content">
+        跳到主内容
+      </a>
+      <div className="aurora aurora-one" aria-hidden="true" />
+      <div className="aurora aurora-two" aria-hidden="true" />
+      <aside className="side-rail" aria-label="主导航">
         <div className="brand-mark">
           <Radar size={26} />
         </div>
@@ -269,6 +273,8 @@ function App() {
           type="button"
           onClick={() => navigate({ name: "home" })}
           title="首页"
+          aria-label="首页"
+          aria-current={view.name === "home" ? "page" : undefined}
         >
           <Home size={20} />
         </button>
@@ -277,6 +283,8 @@ function App() {
           type="button"
           onClick={() => navigate({ name: "projects" })}
           title="项目"
+          aria-label="项目"
+          aria-current={view.name === "projects" || view.name === "project-detail" ? "page" : undefined}
         >
           <Building2 size={20} />
         </button>
@@ -285,6 +293,8 @@ function App() {
           type="button"
           onClick={() => navigate({ name: "smart-inbox" })}
           title="智能投递箱"
+          aria-label="智能投递箱"
+          aria-current={view.name === "smart-inbox" ? "page" : undefined}
         >
           <Inbox size={20} />
         </button>
@@ -293,6 +303,8 @@ function App() {
           type="button"
           onClick={() => navigate({ name: "progress-dashboard" })}
           title="进度看板"
+          aria-label="进度看板"
+          aria-current={view.name === "progress-dashboard" ? "page" : undefined}
         >
           <BarChart3 size={20} />
         </button>
@@ -301,6 +313,8 @@ function App() {
           type="button"
           onClick={() => navigate({ name: "quick-record" })}
           title="一句话现场记录"
+          aria-label="一句话现场记录"
+          aria-current={view.name === "quick-record" ? "page" : undefined}
         >
           <MessageSquareText size={20} />
         </button>
@@ -309,6 +323,8 @@ function App() {
           type="button"
           onClick={() => navigate({ name: "issues" })}
           title="问题闭环"
+          aria-label="问题闭环"
+          aria-current={view.name === "issues" ? "page" : undefined}
         >
           <ClipboardCheck size={20} />
         </button>
@@ -317,6 +333,8 @@ function App() {
           type="button"
           onClick={() => navigate({ name: "diary-materials" })}
           title="监理日志"
+          aria-label="监理日志"
+          aria-current={view.name === "diary-materials" ? "page" : undefined}
         >
           <BookOpenText size={20} />
         </button>
@@ -325,6 +343,8 @@ function App() {
           type="button"
           onClick={() => navigate({ name: "archive" })}
           title="资料归档"
+          aria-label="资料归档"
+          aria-current={view.name === "archive" ? "page" : undefined}
         >
           <Archive size={20} />
         </button>
@@ -333,12 +353,14 @@ function App() {
           type="button"
           onClick={() => navigate({ name: "settings" })}
           title="系统设置"
+          aria-label="系统设置"
+          aria-current={view.name === "settings" ? "page" : undefined}
         >
           <Settings size={20} />
         </button>
       </aside>
 
-      <section className="workspace">
+      <section className="workspace" id="workspace-content" tabIndex={-1} aria-label="主内容">
         {view.name === "home" && (
           <HomeView
             today={today}
@@ -495,80 +517,140 @@ function HomeView({
   const diaryStatus = diary ? (diary.confirmed ? "已确认" : "已生成未确认") : "未生成";
   const diaryStatusClass = diary ? (diary.confirmed ? "used" : "draft") : "";
   const latestArchive = archiveItems[0];
+  const currentProject = projects[0] ?? null;
+  const projectStatus = currentProject ? (statusLabels[currentProject.status] ?? currentProject.status) : "未选择项目";
+  const riskLabel =
+    issueSummary && issueSummary.overdue_count > 0
+      ? `${issueSummary.overdue_count} 项逾期`
+      : progressOverview?.delay_level === "serious_delay" || progressOverview?.delay_level === "obvious_delay"
+        ? delayLevelLabels[progressOverview.delay_level]
+        : "风险平稳";
+  const todoCount =
+    pendingItems.length +
+    (issueSummary?.pending_rectification_count ?? 0) +
+    (issueSummary?.pending_review_count ?? 0) +
+    (diary && diary.confirmed ? 0 : 1);
 
   return (
-    <div className="home-grid">
-      <header className="hero-panel">
-        <div className="hero-copy">
+    <div className="home-grid space-cockpit">
+      <header className="cockpit-scene">
+        <div className="space-viewport" aria-hidden="true">
+          <span className="star-layer star-layer-one" />
+          <span className="star-layer star-layer-two" />
+          <span className="nebula-cloud" />
+          <span className="planet-body" />
+          <span className="asteroid-field" />
+        </div>
+        <div className="cockpit-frame" aria-hidden="true">
+          <span className="frame-top" />
+          <span className="frame-left" />
+          <span className="frame-right" />
+          <span className="frame-bottom" />
+          <span className="frame-console" />
+        </div>
+        <div className="cockpit-topbar" aria-label="驾驶舱顶部状态">
+          <span>SYS ONLINE</span>
+          <span>WORKFLOW NORMAL</span>
+          <span>SIGNAL {riskLabel}</span>
+        </div>
+        <section className="hud-panel hud-left" aria-label="导航与项目状态">
+          <div className="hud-panel-title">
+            <Radar size={16} />
+            NAVIGATION
+          </div>
+          <span>当前项目</span>
+          <strong>{currentProject?.name ?? "请先新建或选择项目"}</strong>
+          <small>项目状态：{projectStatus}</small>
+          <small>今日日期：{today}</small>
+          <div className="hud-route-list">
+            <button type="button" onClick={onOpenProjects}>项目中心</button>
+            <button type="button" onClick={onOpenProgressDashboard}>进度看板</button>
+            <button type="button" onClick={onOpenIssues}>问题闭环</button>
+            <button type="button" onClick={onOpenArchive}>资料归档</button>
+          </div>
+        </section>
+        <section className="hud-panel hud-right" aria-label="风险和待办状态">
+          <div className="hud-panel-title">
+            <AlertTriangle size={16} />
+            MISSION STATUS
+          </div>
+          <span>风险态势</span>
+          <strong>{riskLabel}</strong>
+          <small>待办：{todoCount} 项</small>
+          <small>待识别资料：{pendingItems.length} 份</small>
+          <div className="hud-bars">
+            <span><i style={{ width: `${Math.min(100, Math.max(12, projects.length * 22))}%` }} />项目</span>
+            <span><i style={{ width: `${Math.min(100, Math.max(12, activeCount * 28))}%` }} />进行</span>
+            <span><i style={{ width: `${Math.min(100, Math.max(12, archiveItems.length * 18))}%` }} />归档</span>
+          </div>
+        </section>
+        <div className="cockpit-crosshair" aria-hidden="true">
+          <span />
+          <span />
+          <span />
+        </div>
+        <section className="cockpit-title-hud">
           <div className="eyebrow">
             <Sparkles size={16} />
-            阶段 8 监理日志一键生成
+            SPACE COMMAND · SMART SUPERVISION
           </div>
           <h1>智能工程监理工作台</h1>
-          <p>从今日日志素材池生成监理日志草稿，支持 AI 配置，也能在 AI 不可用时使用内置模板兜底，最终由监理人员编辑确认。</p>
-          <div className="hero-actions">
-            <button className="primary-button" type="button" onClick={onOpenInbox}>
-              <UploadCloud size={18} />
-              投递资料
-            </button>
-            <button className="primary-button" type="button" onClick={onNewProject}>
-              <Plus size={18} />
-              新建项目
-            </button>
-            <button className="ghost-button" type="button" onClick={onOpenProjects}>
-              <Building2 size={18} />
-              查看项目
-            </button>
-            <button className="ghost-button" type="button" onClick={onOpenProgressDashboard}>
-              <BarChart3 size={18} />
-              进度看板
-            </button>
-            <button className="ghost-button" type="button" onClick={onOpenIssues}>
-              <ClipboardCheck size={18} />
-              问题闭环
-            </button>
-            <button className="ghost-button" type="button" onClick={onOpenDiaryMaterials}>
-              <BookOpenText size={18} />
-              一键生成日志
-            </button>
-            <button className="ghost-button" type="button" onClick={onOpenArchive}>
-              <Archive size={18} />
-              资料归档
-            </button>
-            <button className="ghost-button" type="button" onClick={onOpenSettings}>
-              <Settings size={18} />
-              AI 设置
-            </button>
-          </div>
+          <p>上传资料、识别进度、记录现场、跟踪问题、生成日志和自动归档在同一个驾驶舱内完成。</p>
+        </section>
+        <div className="cockpit-console" aria-label="核心操作控制台">
+          <button className="console-action primary" type="button" onClick={onOpenInbox}>
+            <UploadCloud size={20} />
+            投递资料
+          </button>
+          <button className="console-action" type="button" onClick={onOpenQuickRecord}>
+            <MessageSquareText size={20} />
+            快速记录
+          </button>
+          <button className="console-action" type="button" onClick={onOpenDiaryMaterials}>
+            <BookOpenText size={20} />
+            生成日志
+          </button>
+          <button className="console-action" type="button" onClick={onNewProject}>
+            <Plus size={20} />
+            新建项目
+          </button>
         </div>
-        <div className="hero-status">
-          <div className="date-chip">
-            <CalendarDays size={18} />
-            {today}
-          </div>
-          <div className="radar-card">
-            <Radar size={52} />
-            <span>工程驾驶舱待接入</span>
-          </div>
+        <div className="cockpit-telemetry" aria-label="首页遥测摘要">
+          <span>PROJECT<strong>{projects.length}</strong></span>
+          <span>ACTIVE<strong>{activeCount}</strong></span>
+          <span>INBOX<strong>{pendingItems.length}</strong></span>
+          <span>ARCHIVE<strong>{archiveItems.length}</strong></span>
         </div>
       </header>
 
-      <section className="smart-input panel">
+      <section className="smart-input panel launch-console">
         <div className="panel-title">
           <Bot size={20} />
           <div>
-            <h2>智能输入区</h2>
+            <h2>任务发射控制台</h2>
             <span>资料投递与现场快速记录入口</span>
           </div>
         </div>
         <div className="smart-entry-grid">
-          <button className="input-placeholder inbox-entry" type="button" onClick={onOpenInbox}>
+          <button className="input-placeholder inbox-entry entry-upload" type="button" onClick={onOpenInbox}>
             <UploadCloud size={30} />
-            <span>投递 Excel 进度表后，可在智能投递箱识别、预览并确认发布。</span>
+            <strong>上传文件</strong>
+            <span>投递进度表或业务资料，进入智能投递箱识别。</span>
           </button>
           <button className="input-placeholder inbox-entry quick-entry" type="button" onClick={onOpenQuickRecord}>
             <MessageSquareText size={30} />
-            <span>输入一句现场情况，生成巡视记录、问题草稿和日志素材。</span>
+            <strong>快速记录</strong>
+            <span>一句现场情况生成巡视、问题和日志素材草稿。</span>
+          </button>
+          <button className="input-placeholder inbox-entry photo-entry" type="button" onClick={onOpenInbox}>
+            <Camera size={30} />
+            <strong>上传照片</strong>
+            <span>现场照片先进入资料入口，后续可关联业务。</span>
+          </button>
+          <button className="input-placeholder inbox-entry diary-entry" type="button" onClick={onOpenDiaryMaterials}>
+            <BookOpenText size={30} />
+            <strong>一键生成日志</strong>
+            <span>汇总今日素材，生成可编辑监理日志草稿。</span>
           </button>
         </div>
       </section>
@@ -603,10 +685,36 @@ function HomeView({
           <ListTodo size={20} />
           <div>
             <h2>今日待办</h2>
-            <span>暂无待办</span>
+            <span>{todoCount > 0 ? `${todoCount} 项需要关注` : "暂无待办"}</span>
           </div>
         </div>
-        <EmptyLine text="新建项目后，这里将汇总阶段性任务提醒。" />
+        <div className="todo-list">
+          {pendingItems.length > 0 && (
+            <button className="todo-item" type="button" onClick={onOpenInbox}>
+              <span>待识别资料</span>
+              <strong>{pendingItems.length} 份</strong>
+            </button>
+          )}
+          {issueSummary && issueSummary.pending_review_count > 0 && (
+            <button className="todo-item" type="button" onClick={onOpenIssues}>
+              <span>待复查问题</span>
+              <strong>{issueSummary.pending_review_count} 项</strong>
+            </button>
+          )}
+          {issueSummary && issueSummary.pending_rectification_count > 0 && (
+            <button className="todo-item" type="button" onClick={onOpenIssues}>
+              <span>待整改问题</span>
+              <strong>{issueSummary.pending_rectification_count} 项</strong>
+            </button>
+          )}
+          {(!diary || !diary.confirmed) && (
+            <button className="todo-item" type="button" onClick={onOpenDiaryMaterials}>
+              <span>今日监理日志</span>
+              <strong>{diaryStatus}</strong>
+            </button>
+          )}
+          {todoCount === 0 && <EmptyLine text="暂无紧急事项，今日工作流保持平稳。" />}
+        </div>
       </section>
 
       <section className="panel risk-panel">
@@ -614,10 +722,15 @@ function HomeView({
           <AlertTriangle size={20} />
           <div>
             <h2>风险提醒</h2>
-            <span>暂无风险</span>
+            <span>{riskLabel}</span>
           </div>
         </div>
-        {progressOverview?.delay_level === "serious_delay" || progressOverview?.delay_level === "obvious_delay" ? (
+        {issueSummary && issueSummary.overdue_count > 0 ? (
+          <button className="risk-summary-card risk-pulse" type="button" onClick={onOpenIssues}>
+            <strong>{issueSummary.overdue_count} 项问题已逾期</strong>
+            <span>请进入问题闭环处理通知、回复或复查。</span>
+          </button>
+        ) : progressOverview?.delay_level === "serious_delay" || progressOverview?.delay_level === "obvious_delay" ? (
           <button className="risk-summary-card" type="button" onClick={onOpenProgressDashboard}>
             <strong>{delayLevelLabels[progressOverview.delay_level]}</strong>
             <span>偏差 {formatSignedPercent(progressOverview.deviation)}，请查看进度看板。</span>
@@ -697,6 +810,7 @@ function HomeView({
         </div>
         <button className="input-placeholder inbox-entry" type="button" onClick={onOpenSettings}>
           <Settings size={28} />
+          <strong>AI 配置与兜底生成</strong>
           <span>配置 Base URL、API Key 和 Model；AI 不可用时系统会自动使用内置日志模板。</span>
         </button>
       </section>
@@ -3780,7 +3894,7 @@ function TextField({
   const fieldId = `project-${name}`;
 
   return (
-    <label className="field" htmlFor={fieldId}>
+    <label className={required ? "field required-field" : "field"} htmlFor={fieldId}>
       <span>{label}</span>
       <input
         id={fieldId}
