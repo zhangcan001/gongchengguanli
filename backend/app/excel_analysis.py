@@ -164,24 +164,27 @@ def match_field(source_field: str) -> tuple[str, float]:
 class ExcelAnalysisService:
     def analyze(self, file_path: Path, *, fallback_date: date | None = None) -> ExcelAnalysisResult:
         workbook = load_workbook(file_path, data_only=True, read_only=True)
-        worksheet = self._select_sheet(workbook.worksheets)
-        header_row_index = self._detect_header_row(worksheet)
-        headers = self._read_headers(worksheet, header_row_index)
-        data_start_row_index = self._detect_data_start_row(worksheet, header_row_index)
-        mappings = self._build_mappings(headers)
-        data_date = self._detect_data_date(file_path.name, worksheet, headers, data_start_row_index, fallback_date)
-        preview_rows, warnings, errors = self._build_preview(worksheet, headers, mappings, data_start_row_index)
+        try:
+            worksheet = self._select_sheet(workbook.worksheets)
+            header_row_index = self._detect_header_row(worksheet)
+            headers = self._read_headers(worksheet, header_row_index)
+            data_start_row_index = self._detect_data_start_row(worksheet, header_row_index)
+            mappings = self._build_mappings(headers)
+            data_date = self._detect_data_date(file_path.name, worksheet, headers, data_start_row_index, fallback_date)
+            preview_rows, warnings, errors = self._build_preview(worksheet, headers, mappings, data_start_row_index)
 
-        return ExcelAnalysisResult(
-            sheet_name=worksheet.title,
-            header_row_index=header_row_index,
-            data_start_row_index=data_start_row_index,
-            data_date=data_date,
-            field_mappings=mappings,
-            preview_rows=preview_rows,
-            warnings=warnings,
-            errors=errors,
-        )
+            return ExcelAnalysisResult(
+                sheet_name=worksheet.title,
+                header_row_index=header_row_index,
+                data_start_row_index=data_start_row_index,
+                data_date=data_date,
+                field_mappings=mappings,
+                preview_rows=preview_rows,
+                warnings=warnings,
+                errors=errors,
+            )
+        finally:
+            workbook.close()
 
     def validate(
         self,
@@ -193,9 +196,12 @@ class ExcelAnalysisService:
         mappings: list[FieldMappingDraft],
     ) -> tuple[list[PreviewRowDraft], list[ValidationIssueDraft], list[ValidationIssueDraft]]:
         workbook = load_workbook(file_path, data_only=True, read_only=True)
-        worksheet = workbook[sheet_name]
-        headers = self._read_headers(worksheet, header_row_index)
-        return self._build_preview(worksheet, headers, mappings, data_start_row_index)
+        try:
+            worksheet = workbook[sheet_name]
+            headers = self._read_headers(worksheet, header_row_index)
+            return self._build_preview(worksheet, headers, mappings, data_start_row_index)
+        finally:
+            workbook.close()
 
     def _select_sheet(self, worksheets: list[Worksheet]) -> Worksheet:
         best_sheet = worksheets[0]
