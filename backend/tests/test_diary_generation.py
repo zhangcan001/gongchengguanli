@@ -158,3 +158,124 @@ def test_ai_generation_record_created_for_fallback(client):
     assert row[0] == "diary_generate"
     assert row[1].startswith("used_ai=0;")
     assert "construction_summary" in json.loads(row[2])
+
+
+def test_generate_and_confirm_personal_diary_fields(client):
+    project = create_project(client)
+    client.post(
+        "/api/diary/materials",
+        json={
+            "project_id": project["id"],
+            "material_date": "2026-05-26",
+            "source_type": "patrol",
+            "content": "巡视发现 3#楼12层砌体灰缝不饱满，要求整改。",
+        },
+    )
+
+    generated = client.post(
+        "/api/diary/generate",
+        json={
+            "project_id": project["id"],
+            "diary_date": "2026-05-26",
+            "writer": "王监理",
+            "city": "深圳",
+            "weather_morning": "晴",
+            "weather_afternoon": "多云",
+            "temperature": "25-32℃",
+            "humidity": "70%",
+            "wind_direction": "东南",
+            "wind_power": "3级",
+            "mode": "analyze",
+            "current_draft": {
+                "constructionStatus": "3#楼砌体施工。",
+                "contractorPersonnel": "砌体班组 12 人。",
+                "machinery": "施工升降机 1 台。",
+                "inspectionWork": "",
+                "materialAcceptance": "无。",
+                "acceptanceWork": "无。",
+                "standingWork": "无。",
+                "meeting": "无。",
+                "internalWork": "整理巡视记录。",
+                "issuesAndActions": "",
+                "otherMatters": "明日复查整改。",
+                "specialistSupervisorComments": "",
+                "chiefEngineerComments": "",
+            },
+        },
+    )
+
+    assert generated.status_code == 200
+    generated_payload = generated.json()
+    personal = generated_payload["personal_draft"]
+    assert "灰缝不饱满" in personal["inspectionWork"]
+
+    personal["chiefEngineerComments"] = "总监已阅。"
+    confirm = client.post(
+        "/api/diary/confirm",
+        json={
+            "project_id": project["id"],
+            "diary_date": "2026-05-26",
+            "writer": "王监理",
+            "city": "深圳",
+            "weather_morning": "晴",
+            "weather_afternoon": "多云",
+            "temperature": "25-32℃",
+            "humidity": "70%",
+            "wind_direction": "东南",
+            "wind_power": "3级",
+            "ai_generation_id": generated_payload["ai_generation_id"],
+            "personal_draft": personal,
+        },
+    )
+
+    assert confirm.status_code == 200
+    diary = confirm.json()
+    assert diary["confirmed"] is True
+    assert diary["writer"] == "王监理"
+    assert diary["city"] == "深圳"
+    assert diary["weekday"] == "星期二"
+    assert diary["weather_morning"] == "晴"
+    assert diary["weather_afternoon"] == "多云"
+    assert diary["construction_status"] == personal["constructionStatus"]
+    assert diary["inspection_work"] == personal["inspectionWork"]
+    assert diary["chief_engineer_comments"] == "总监已阅。"
+
+    detail = client.get(f"/api/diary?project_id={project['id']}&date=2026-05-26").json()
+    assert detail["inspection_work"] == personal["inspectionWork"]
+
+
+def test_polish_mode_only_changes_allowed_personal_fields(client):
+    project = create_project(client)
+    current_draft = {
+        "constructionStatus": "今日施工正常。",
+        "contractorPersonnel": "土建班组 8 人。",
+        "machinery": "塔吊 1 台。",
+        "inspectionWork": "巡视未见异常。",
+        "materialAcceptance": "无。",
+        "acceptanceWork": "无。",
+        "standingWork": "无。",
+        "meeting": "无。",
+        "internalWork": "整理资料。",
+        "issuesAndActions": "无。",
+        "otherMatters": "明日继续跟踪。",
+        "specialistSupervisorComments": "保持。",
+        "chiefEngineerComments": "保持。",
+    }
+
+    response = client.post(
+        "/api/diary/generate",
+        json={
+            "project_id": project["id"],
+            "diary_date": "2026-05-26",
+            "mode": "polish",
+            "current_draft": current_draft,
+        },
+    )
+
+    assert response.status_code == 200
+    personal = response.json()["personal_draft"]
+    assert personal["contractorPersonnel"] == current_draft["contractorPersonnel"]
+    assert personal["machinery"] == current_draft["machinery"]
+    assert personal["specialistSupervisorComments"] == current_draft["specialistSupervisorComments"]
+    assert personal["constructionStatus"]
+    assert personal["inspectionWork"]

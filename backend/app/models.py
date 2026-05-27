@@ -290,6 +290,105 @@ class ProgressDataQualityResponse(BaseModel):
     error_items: list[ProgressDataQualityItem]
 
 
+class DashboardScope(BaseModel):
+    project_id: int
+    view_mode: str
+    scope_label: str
+    message: str | None = None
+    filters: dict[str, Any]
+    options: dict[str, Any]
+
+
+class DashboardOverview(BaseModel):
+    project_id: int
+    data_date: date | None = None
+    item_count: int
+    task_count: int
+    actual_percent: float | None = None
+    planned_percent: float | None = None
+    progress_deviation: float | None = None
+    delay_level: str
+    delay_level_label: str
+    weight_total: float | None = None
+    weight_count: int
+    calculation_method: str
+    calculation_method_name: str
+    no_calculable_progress: bool
+
+
+class DashboardGroupCard(BaseModel):
+    name: str
+    actual_percent: float | None = None
+    planned_percent: float | None = None
+    progress_deviation: float | None = None
+    status: str
+    status_label: str
+    task_count: int
+    delayed_count: int
+    serious_delayed_count: int
+    weight_total: float | None = None
+
+
+class FloorHeatmapItem(BaseModel):
+    building: str
+    floor: str
+    actual_percent: float | None = None
+    planned_percent: float | None = None
+    progress_deviation: float | None = None
+    status: str
+    status_label: str
+    task_count: int
+    delayed_count: int
+    serious_delayed_count: int
+    major_delayed_tasks: list[str] = []
+
+
+class DashboardDelayedTask(BaseModel):
+    id: int
+    batch_id: int
+    data_date: date | None = None
+    building: str | None = None
+    floor: str | None = None
+    area: str | None = None
+    discipline: str | None = None
+    task_name: str | None = None
+    planned_percent: float | None = None
+    actual_percent: float | None = None
+    progress_deviation: float
+    delay_level: str
+    delay_level_label: str
+    remark: str | None = None
+
+
+class DelayDistributionItem(BaseModel):
+    status: str
+    status_label: str
+    count: int
+
+
+class CalculationContext(BaseModel):
+    calculation_method: str
+    calculation_method_name: str
+    recommendation_reason: str
+    weight_total: float | None = None
+    weight_source: str | None = None
+    participating_task_count: int
+    text: str
+
+
+class ProgressDashboardV2Response(BaseModel):
+    scope: DashboardScope
+    overview: DashboardOverview
+    discipline_cards: list[DashboardGroupCard]
+    building_cards: list[DashboardGroupCard]
+    floor_heatmap: list[FloorHeatmapItem]
+    delay_distribution: list[DelayDistributionItem]
+    delayed_tasks: list[DashboardDelayedTask]
+    data_quality: ProgressDataQualityResponse
+    calculation_context: CalculationContext
+    dashboard_capabilities: dict[str, dict[str, Any]]
+
+
 class QuickRecordAnalyzeRequest(BaseModel):
     project_id: int
     content: str = Field(..., min_length=1, max_length=2000)
@@ -533,16 +632,42 @@ class DiaryDraft(BaseModel):
     tomorrow_plan: str = ""
 
 
+class DiaryPersonalDraft(BaseModel):
+    constructionStatus: str = ""
+    contractorPersonnel: str = ""
+    machinery: str = ""
+    inspectionWork: str = ""
+    materialAcceptance: str = ""
+    acceptanceWork: str = ""
+    standingWork: str = ""
+    meeting: str = ""
+    internalWork: str = ""
+    issuesAndActions: str = ""
+    otherMatters: str = ""
+    specialistSupervisorComments: str = ""
+    chiefEngineerComments: str = ""
+
+
 class DiaryGenerateRequest(BaseModel):
     project_id: int
     diary_date: date
     weather: str | None = Field(default=None, max_length=80)
+    weather_morning: str | None = Field(default=None, max_length=80)
+    weather_afternoon: str | None = Field(default=None, max_length=80)
     temperature: str | None = Field(default=None, max_length=80)
+    humidity: str | None = Field(default=None, max_length=80)
+    wind_direction: str | None = Field(default=None, max_length=80)
+    wind_power: str | None = Field(default=None, max_length=80)
+    city: str | None = Field(default=None, max_length=120)
+    writer: str | None = Field(default=None, max_length=80)
+    mode: str = Field(default="analyze", max_length=20)
+    current_draft: DiaryPersonalDraft | None = None
     manual_note: str | None = Field(default=None, max_length=4000)
 
 
 class DiaryGenerateResponse(BaseModel):
     draft: DiaryDraft
+    personal_draft: DiaryPersonalDraft
     ai_generation_id: int
     used_ai: bool
     message: str | None = None
@@ -552,26 +677,71 @@ class DiaryConfirmRequest(BaseModel):
     project_id: int
     diary_date: date
     weather: str | None = Field(default=None, max_length=80)
+    weather_morning: str | None = Field(default=None, max_length=80)
+    weather_afternoon: str | None = Field(default=None, max_length=80)
     temperature: str | None = Field(default=None, max_length=80)
-    draft: DiaryDraft
+    humidity: str | None = Field(default=None, max_length=80)
+    wind_direction: str | None = Field(default=None, max_length=80)
+    wind_power: str | None = Field(default=None, max_length=80)
+    city: str | None = Field(default=None, max_length=120)
+    writer: str | None = Field(default=None, max_length=80)
+    draft: DiaryDraft | None = None
+    personal_draft: DiaryPersonalDraft | None = None
     ai_generation_id: int | None = None
+
+
+class DiaryWeatherFetchRequest(BaseModel):
+    city: str = Field(..., min_length=1, max_length=120)
+    diary_date: date
+
+
+class DiaryWeatherResult(BaseModel):
+    city: str
+    date: date
+    weather_morning: str
+    weather_afternoon: str
+    temperature: str
+    humidity: str
+    wind_direction: str
+    wind_power: str
 
 
 class Diary(BaseModel):
     id: int
     project_id: int
     diary_date: date
+    weekday: str | None = None
+    writer: str | None = None
+    city: str | None = None
     weather: str | None = None
+    weather_morning: str | None = None
+    weather_afternoon: str | None = None
     temperature: str | None = None
+    humidity: str | None = None
+    wind_direction: str | None = None
+    wind_power: str | None = None
     construction_summary: str | None = None
+    construction_status: str | None = None
     workers_summary: str | None = None
+    contractor_personnel: str | None = None
     machinery_summary: str | None = None
+    machinery: str | None = None
     quality_summary: str | None = None
     safety_summary: str | None = None
     patrol_summary: str | None = None
+    inspection_work: str | None = None
+    material_acceptance: str | None = None
+    acceptance_work: str | None = None
+    standing_work: str | None = None
+    meeting: str | None = None
+    internal_work: str | None = None
     issue_summary: str | None = None
+    issues_and_actions: str | None = None
     handling_opinion: str | None = None
     tomorrow_plan: str | None = None
+    other_matters: str | None = None
+    specialist_supervisor_comments: str | None = None
+    chief_engineer_comments: str | None = None
     ai_generated: bool
     confirmed: bool
     created_at: datetime
