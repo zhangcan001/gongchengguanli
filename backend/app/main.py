@@ -8,7 +8,27 @@ from fastapi.middleware.cors import CORSMiddleware
 from .config import Settings, get_settings
 from .database import get_connection, initialize_database
 from .errors import ErrorCode
-from .models import HealthResponse, Project, ProjectCreate, ProjectUpdate, SmartInboxItem, SmartInboxUploadResponse
+from .models import (
+    HealthResponse,
+    ProgressImportAnalyzeRequest,
+    ProgressImportAnalyzeResponse,
+    ProgressImportBatch,
+    ProgressImportPublishRequest,
+    ProgressImportPublishResponse,
+    ProgressImportValidateRequest,
+    Project,
+    ProjectCreate,
+    ProjectUpdate,
+    SmartInboxItem,
+    SmartInboxUploadResponse,
+)
+from .progress_import import (
+    analyze_progress_import,
+    get_import_batch_detail,
+    list_import_batches,
+    publish_progress_import,
+    validate_progress_import,
+)
 from .repositories import (
     RepositoryError,
     create_project,
@@ -50,6 +70,18 @@ def create_app(settings: Settings | None = None) -> FastAPI:
             raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code, "message": error.message})
         if error.code == ErrorCode.SMART_INBOX_FILE_REQUIRED:
             raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.SMART_INBOX_NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.IMPORT_BATCH_NOT_FOUND:
+            raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.UNSUPPORTED_EXCEL_FILE:
+            raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.IMPORT_BATCH_HAS_ERRORS:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.IMPORT_BATCH_REPLACEMENT_REQUIRED:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code, "message": error.message})
+        if error.code == ErrorCode.IMPORT_BATCH_ALREADY_PUBLISHED:
+            raise HTTPException(status_code=status.HTTP_409_CONFLICT, detail={"code": error.code, "message": error.message})
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail={"code": "UNKNOWN_ERROR", "message": "Unknown error."})
 
     @app.get("/api/health", response_model=HealthResponse)
@@ -120,6 +152,58 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict[str, int | str]:
         try:
             return save_uploaded_file(connection, app_settings, project_id=project_id, file=file)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/progress/import/analyze", response_model=ProgressImportAnalyzeResponse)
+    def api_analyze_progress_import(
+        payload: ProgressImportAnalyzeRequest,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return analyze_progress_import(connection, app_settings, payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/progress/import/{batch_id}/validate", response_model=ProgressImportBatch)
+    def api_validate_progress_import(
+        batch_id: int,
+        payload: ProgressImportValidateRequest,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return validate_progress_import(connection, app_settings, batch_id, payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/progress/import/{batch_id}/publish", response_model=ProgressImportPublishResponse)
+    def api_publish_progress_import(
+        batch_id: int,
+        payload: ProgressImportPublishRequest,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return publish_progress_import(connection, batch_id, payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/progress/import-batches", response_model=list[ProgressImportBatch])
+    def api_list_import_batches(
+        project_id: int | None = Query(default=None),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> list[dict]:
+        try:
+            return list_import_batches(connection, project_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/progress/import-batches/{batch_id}", response_model=ProgressImportBatch)
+    def api_get_import_batch(
+        batch_id: int,
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return get_import_batch_detail(connection, batch_id)
         except RepositoryError as error:
             handle_repository_error(error)
 

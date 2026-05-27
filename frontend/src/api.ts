@@ -1,4 +1,13 @@
-import type { Project, ProjectInput, SmartInboxItem, SmartInboxUploadResult } from "./types";
+import type {
+  FieldMapping,
+  ProgressImportAnalyzeResult,
+  ProgressImportBatch,
+  ProgressImportPublishResult,
+  Project,
+  ProjectInput,
+  SmartInboxItem,
+  SmartInboxUploadResult,
+} from "./types";
 
 const API_BASE = "";
 
@@ -69,6 +78,42 @@ export async function uploadSmartInboxFile(projectId: number, file: File): Promi
     method: "POST",
     body: formData,
   });
+}
+
+export async function analyzeProgressImport(projectId: number, inboxId: number): Promise<ProgressImportAnalyzeResult> {
+  return request<ProgressImportAnalyzeResult>("/api/progress/import/analyze", {
+    method: "POST",
+    body: JSON.stringify({ project_id: projectId, inbox_id: inboxId }),
+  });
+}
+
+export async function validateProgressImport(batchId: number, fieldMappings: FieldMapping[]): Promise<ProgressImportBatch> {
+  return request<ProgressImportBatch>(`/api/progress/import/${batchId}/validate`, {
+    method: "POST",
+    body: JSON.stringify({
+      field_mappings: fieldMappings.map((mapping) => ({
+        source_field: mapping.source_field,
+        target_field: mapping.target_field,
+        confidence: mapping.confidence,
+        is_confirmed: mapping.is_confirmed,
+      })),
+    }),
+  });
+}
+
+export async function publishProgressImport(batchId: number, replaceExisting: boolean): Promise<ProgressImportPublishResult> {
+  return request<ProgressImportPublishResult>(`/api/progress/import/${batchId}/publish`, {
+    method: "POST",
+    body: JSON.stringify({ replace_existing: replaceExisting }),
+  });
+}
+
+export async function fetchImportBatch(batchId: number): Promise<ProgressImportBatch> {
+  return request<ProgressImportBatch>(`/api/progress/import-batches/${batchId}`);
+}
+
+export async function fetchImportBatches(): Promise<ProgressImportBatch[]> {
+  return request<ProgressImportBatch[]>("/api/progress/import-batches");
 }
 
 function normalizePayload<T extends Partial<ProjectInput>>(payload: T): Partial<ProjectInput> {

@@ -1,4 +1,5 @@
 from datetime import date, datetime
+from typing import Any
 
 from pydantic import BaseModel, ConfigDict, Field
 
@@ -81,3 +82,89 @@ class SmartInboxUploadResponse(BaseModel):
     inbox_id: int
     file_id: int
     status: str
+
+
+class ProgressImportAnalyzeRequest(BaseModel):
+    project_id: int
+    inbox_id: int
+
+
+class ProgressImportValidateRequest(BaseModel):
+    field_mappings: list["FieldMappingInput"]
+
+
+class ProgressImportPublishRequest(BaseModel):
+    replace_existing: bool = False
+
+
+class FieldMappingInput(BaseModel):
+    source_field: str
+    target_field: str
+    confidence: float = 1
+    is_confirmed: bool = True
+
+
+class FieldMapping(BaseModel):
+    id: int | None = None
+    project_id: int | None = None
+    data_type: str = "progress"
+    source_field: str
+    target_field: str
+    confidence: float
+    is_confirmed: bool
+    created_at: datetime | None = None
+    updated_at: datetime | None = None
+
+
+class ValidationIssue(BaseModel):
+    row_index: int
+    field: str | None = None
+    message: str
+    severity: str
+
+
+class PreviewRow(BaseModel):
+    row_index: int
+    source: dict[str, Any]
+    normalized: dict[str, Any]
+    issues: list[ValidationIssue] = []
+
+
+class ProgressImportAnalyzeResponse(BaseModel):
+    batch_id: int
+    detected_sheet: str
+    header_row_index: int
+    data_start_row_index: int
+    data_date: str
+    field_mappings: list[FieldMapping]
+    preview_rows: list[PreviewRow]
+    warnings: list[ValidationIssue]
+    errors: list[ValidationIssue]
+    replacement_required: bool = False
+
+
+class ProgressImportBatch(BaseModel):
+    id: int
+    project_id: int
+    inbox_id: int
+    data_type: str
+    data_date: date
+    file_name: str
+    sheet_name: str
+    header_row_index: int
+    data_start_row_index: int
+    status: str
+    preview_rows: list[PreviewRow] = []
+    validation_warnings: list[ValidationIssue] = []
+    validation_errors: list[ValidationIssue] = []
+    replacement_required: bool = False
+    created_at: datetime
+    published_at: datetime | None = None
+    field_mappings: list[FieldMapping] = []
+
+
+class ProgressImportPublishResponse(BaseModel):
+    batch_id: int
+    status: str
+    published_records: int
+    replaced_existing: bool

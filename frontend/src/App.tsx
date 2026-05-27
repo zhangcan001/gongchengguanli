@@ -25,13 +25,25 @@ import {
 } from "lucide-react";
 import { type ChangeEvent, type FormEvent, type ReactNode, useEffect, useMemo, useRef, useState } from "react";
 
-import { createProject, deleteProject, fetchProject, fetchProjects, fetchSmartInbox, uploadSmartInboxFile } from "./api";
-import type { Project, ProjectInput, SmartInboxItem } from "./types";
+import {
+  analyzeProgressImport,
+  createProject,
+  deleteProject,
+  fetchImportBatch,
+  fetchProject,
+  fetchProjects,
+  fetchSmartInbox,
+  publishProgressImport,
+  uploadSmartInboxFile,
+  validateProgressImport,
+} from "./api";
+import type { FieldMapping, ProgressImportBatch, Project, ProjectInput, SmartInboxItem } from "./types";
 
 type View =
   | { name: "home" }
   | { name: "projects" }
   | { name: "smart-inbox" }
+  | { name: "progress-import"; batchId: number }
   | { name: "new-project" }
   | { name: "project-detail"; projectId: number };
 
@@ -167,6 +179,16 @@ function App() {
             onRefresh={loadInbox}
             onUploaded={loadInbox}
             onNewProject={() => navigate({ name: "new-project" })}
+            onOpenProgressImport={(batchId) => navigate({ name: "progress-import", batchId })}
+          />
+        )}
+        {view.name === "progress-import" && (
+          <ProgressImportView
+            batchId={view.batchId}
+            onBack={() => navigate({ name: "smart-inbox" })}
+            onPublished={() => {
+              void loadInbox();
+            }}
           />
         )}
         {view.name === "projects" && (
@@ -222,10 +244,10 @@ function HomeView({ today, projects, inboxItems, onOpenProjects, onNewProject, o
         <div className="hero-copy">
           <div className="eyebrow">
             <Sparkles size={16} />
-            阶段 2 智能投递箱
+            阶段 3 进度智能导入
           </div>
           <h1>智能工程监理工作台</h1>
-          <p>项目基础框架已就绪；本阶段接入资料投递队列，让上传文件先进入待识别、待确认状态。</p>
+          <p>进度 Excel 进入识别、映射、预览、校验和发布流程；正式进度数据必须由你确认后写入。</p>
           <div className="hero-actions">
             <button className="primary-button" type="button" onClick={onOpenInbox}>
               <UploadCloud size={18} />
@@ -258,12 +280,12 @@ function HomeView({ today, projects, inboxItems, onOpenProjects, onNewProject, o
           <Bot size={20} />
           <div>
             <h2>智能输入区</h2>
-            <span>阶段 2 文件投递入口</span>
+            <span>阶段 3 进度表识别入口</span>
           </div>
         </div>
         <button className="input-placeholder inbox-entry" type="button" onClick={onOpenInbox}>
           <UploadCloud size={30} />
-          <span>拖拽式智能投递箱已接入，可上传资料进入待识别队列。</span>
+          <span>投递 Excel 进度表后，可在智能投递箱识别、预览并确认发布。</span>
         </button>
       </section>
 
@@ -352,6 +374,7 @@ function SmartInboxView({
   onRefresh,
   onUploaded,
   onNewProject,
+  onOpenProgressImport,
 }: {
   projects: Project[];
   items: SmartInboxItem[];
@@ -360,12 +383,14 @@ function SmartInboxView({
   onRefresh: () => Promise<void>;
   onUploaded: () => Promise<void>;
   onNewProject: () => void;
+  onOpenProgressImport: (batchId: number) => void;
 }) {
   const fileInputRef = useRef<HTMLInputElement | null>(null);
   const [selectedProjectId, setSelectedProjectId] = useState<number | "">(projects[0]?.id ?? "");
   const [uploading, setUploading] = useState(false);
   const [uploadMessage, setUploadMessage] = useState("");
   const [uploadError, setUploadError] = useState("");
+  const [analyzingInboxId, setAnalyzingInboxId] = useState<number | null>(null);
 
   useEffect(() => {
     if (!selectedProjectId && projects[0]?.id) {
@@ -399,12 +424,26 @@ function SmartInboxView({
     }
   }
 
+  async function handleAnalyzeProgress(item: SmartInboxItem) {
+    setAnalyzingInboxId(item.id);
+    setUploadError("");
+    try {
+      const result = await analyzeProgressImport(item.project_id, item.id);
+      await onRefresh();
+      onOpenProgressImport(result.batch_id);
+    } catch (analysisError) {
+      setUploadError(analysisError instanceof Error ? analysisError.message : "进度表识别失败");
+    } finally {
+      setAnalyzingInboxId(null);
+    }
+  }
+
   return (
     <div className="page-stack">
       <PageHeader
-        eyebrow="阶段 2"
+        eyebrow="阶段 3"
         title="智能投递箱"
-        description="上传资料后保存到本地 uploads 目录，并进入待识别队列；本阶段不做 Excel 解析、AI 识别或进度发布。"
+        description="上传资料后进入待识别队列；Excel 文件可识别为进度表，先预览校验，再由用户确认发布。"
         action={
           <button className="icon-text-button" type="button" onClick={() => void onRefresh()}>
             <Activity size={17} />
@@ -488,9 +527,20 @@ function SmartInboxView({
                 <span>识别类型</span>
                 <strong>{item.detected_type === "unrecognized" ? "待识别" : item.detected_type ?? "待识别"}</strong>
               </div>
-              <button className="ghost-button small-action" type="button" disabled>
-                操作占位
-              </button>
+              {isExcelInboxItem(item) ? (
+                <button
+                  className="primary-button small-action"
+                  type="button"
+                  disabled={analyzingInboxId === item.id}
+                  onClick={() => void handleAnalyzeProgress(item)}
+                >
+                  {analyzingInboxId === item.id ? "识别中..." : "识别为进度表"}
+                </button>
+              ) : (
+                <button className="ghost-button small-action" type="button" disabled>
+                  操作占位
+                </button>
+              )}
             </article>
           ))}
         </div>
@@ -537,6 +587,280 @@ function formatFileSize(bytes: number): string {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function isExcelInboxItem(item: SmartInboxItem): boolean {
+  const fileType = item.file?.file_type?.toLowerCase();
+  const fileName = item.file?.original_file_name?.toLowerCase() ?? "";
+  return fileType === "xlsx" || fileType === "xlsm" || fileName.endsWith(".xlsx") || fileName.endsWith(".xlsm");
+}
+
+const progressTargetFields = [
+  "",
+  "building",
+  "floor",
+  "area",
+  "discipline",
+  "task_name",
+  "unit",
+  "total_quantity",
+  "cumulative_quantity",
+  "period_quantity",
+  "planned_percent",
+  "actual_percent",
+  "planned_start_date",
+  "planned_finish_date",
+  "remark",
+];
+
+const progressTargetLabels: Record<string, string> = {
+  "": "不导入",
+  building: "楼栋",
+  floor: "楼层",
+  area: "区域/部位",
+  discipline: "专业",
+  task_name: "任务名称",
+  unit: "单位",
+  total_quantity: "总量",
+  cumulative_quantity: "累计完成",
+  period_quantity: "本期完成",
+  planned_percent: "计划完成率",
+  actual_percent: "实际完成率",
+  planned_start_date: "计划开始",
+  planned_finish_date: "计划完成",
+  remark: "备注",
+};
+
+function fieldHasError(row: { issues: Array<{ field: string | null; severity: string }> }, field: string): boolean {
+  return row.issues.some((issue) => issue.field === field && issue.severity === "error");
+}
+
+function fieldHasWarning(row: { issues: Array<{ field: string | null; severity: string }> }, field: string): boolean {
+  return row.issues.some((issue) => issue.field === field && issue.severity === "warning");
+}
+
+function valueText(value: unknown): string {
+  if (value === null || value === undefined || value === "") {
+    return "-";
+  }
+  return String(value);
+}
+
+function ProgressImportView({
+  batchId,
+  onBack,
+  onPublished,
+}: {
+  batchId: number;
+  onBack: () => void;
+  onPublished: () => void;
+}) {
+  const [batch, setBatch] = useState<ProgressImportBatch | null>(null);
+  const [mappings, setMappings] = useState<FieldMapping[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [working, setWorking] = useState(false);
+  const [message, setMessage] = useState("");
+  const [error, setError] = useState("");
+
+  async function loadBatch() {
+    setLoading(true);
+    setError("");
+    try {
+      const detail = await fetchImportBatch(batchId);
+      setBatch(detail);
+      setMappings(detail.field_mappings);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "导入批次加载失败");
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    void loadBatch();
+  }, [batchId]);
+
+  function updateMapping(index: number, targetField: string) {
+    setMappings((current) =>
+      current.map((mapping, mappingIndex) =>
+        mappingIndex === index ? { ...mapping, target_field: targetField, is_confirmed: true } : mapping,
+      ),
+    );
+  }
+
+  async function handleValidate() {
+    setWorking(true);
+    setMessage("");
+    setError("");
+    try {
+      const detail = await validateProgressImport(batchId, mappings);
+      setBatch(detail);
+      setMappings(detail.field_mappings);
+      setMessage("字段映射已重新校验。");
+    } catch (validateError) {
+      setError(validateError instanceof Error ? validateError.message : "重新校验失败");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  async function handlePublish() {
+    if (!batch) {
+      return;
+    }
+    if (batch.validation_errors.length > 0) {
+      setError("存在 error，不能发布。");
+      return;
+    }
+
+    let replaceExisting = false;
+    if (batch.replacement_required) {
+      replaceExisting = window.confirm("同项目同 data_date 已有进度数据，是否替换？");
+      if (!replaceExisting) {
+        return;
+      }
+    } else if (batch.validation_warnings.length > 0) {
+      const confirmed = window.confirm("当前存在 warning，确认继续发布？");
+      if (!confirmed) {
+        return;
+      }
+    }
+
+    setWorking(true);
+    setMessage("");
+    setError("");
+    try {
+      const result = await publishProgressImport(batchId, replaceExisting);
+      const detail = await fetchImportBatch(batchId);
+      setBatch(detail);
+      setMessage(`发布成功，写入 ${result.published_records} 条进度记录。`);
+      onPublished();
+    } catch (publishError) {
+      setError(publishError instanceof Error ? publishError.message : "发布失败");
+    } finally {
+      setWorking(false);
+    }
+  }
+
+  const canPublish = Boolean(batch && batch.validation_errors.length === 0 && batch.status !== "published");
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="阶段 3"
+        title="进度识别确认"
+        description="先识别、预览、校验，再由用户确认发布到正式进度记录。"
+        action={
+          <button className="ghost-button" type="button" onClick={onBack}>
+            <ArrowLeft size={18} />
+            返回投递箱
+          </button>
+        }
+      />
+
+      {loading && <section className="panel"><EmptyLine text="正在加载进度识别结果..." /></section>}
+      {error && <div className="error-banner">{error}</div>}
+      {message && <div className="success-banner">{message}</div>}
+
+      {batch && (
+        <>
+          <section className="panel import-summary">
+            <Info label="文件名" value={batch.file_name} />
+            <Info label="Sheet" value={batch.sheet_name} />
+            <Info label="表头行" value={String(batch.header_row_index)} />
+            <Info label="数据开始行" value={String(batch.data_start_row_index)} />
+            <Info label="data_date" value={batch.data_date} />
+            <Info label="状态" value={batch.status} />
+          </section>
+
+          <section className="panel">
+            <div className="list-toolbar">
+              <span>字段映射</span>
+              <button className="icon-text-button" type="button" disabled={working} onClick={() => void handleValidate()}>
+                <Activity size={17} />
+                重新校验
+              </button>
+            </div>
+            <div className="mapping-grid">
+              {mappings.map((mapping, index) => (
+                <label className="mapping-row" key={`${mapping.source_field}-${index}`}>
+                  <span>{mapping.source_field}</span>
+                  <select value={mapping.target_field} onChange={(event) => updateMapping(index, event.target.value)}>
+                    {progressTargetFields.map((field) => (
+                      <option key={field || "none"} value={field}>
+                        {progressTargetLabels[field]}
+                      </option>
+                    ))}
+                  </select>
+                  <strong>{Math.round(mapping.confidence * 100)}%</strong>
+                </label>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="list-toolbar">
+              <span>错误和警告</span>
+              <span className="muted-note">{batch.validation_errors.length} errors · {batch.validation_warnings.length} warnings</span>
+            </div>
+            <div className="issue-list">
+              {[...batch.validation_errors, ...batch.validation_warnings].length === 0 && <EmptyLine text="当前校验无错误和警告。" />}
+              {[...batch.validation_errors, ...batch.validation_warnings].map((issue, index) => (
+                <div className={`issue-item ${issue.severity}`} key={`${issue.row_index}-${issue.field}-${index}`}>
+                  <strong>{issue.severity.toUpperCase()}</strong>
+                  <span>第 {issue.row_index} 行 · {issue.field ?? "整行"} · {issue.message}</span>
+                </div>
+              ))}
+            </div>
+          </section>
+
+          <section className="panel">
+            <div className="list-toolbar">
+              <span>数据预览</span>
+              <span className="muted-note">异常单元格已高亮</span>
+            </div>
+            <div className="preview-table-wrap">
+              <table className="preview-table">
+                <thead>
+                  <tr>
+                    <th>行号</th>
+                    {progressTargetFields.filter(Boolean).map((field) => (
+                      <th key={field}>{progressTargetLabels[field]}</th>
+                    ))}
+                  </tr>
+                </thead>
+                <tbody>
+                  {batch.preview_rows.map((row) => (
+                    <tr key={row.row_index}>
+                      <td>{row.row_index}</td>
+                      {progressTargetFields.filter(Boolean).map((field) => (
+                        <td
+                          className={fieldHasError(row, field) ? "cell-error" : fieldHasWarning(row, field) ? "cell-warning" : ""}
+                          key={field}
+                        >
+                          {valueText(row.normalized[field])}
+                        </td>
+                      ))}
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+            </div>
+          </section>
+
+          <section className="publish-bar">
+            <div>
+              <strong>{batch.replacement_required ? "检测到同项目同日期已有进度数据" : "发布前请确认预览和字段映射"}</strong>
+              <span>{batch.validation_warnings.length > 0 ? "存在 warning，可确认后发布。" : "无 warning。"}</span>
+            </div>
+            <button className="primary-button" type="button" disabled={!canPublish || working} onClick={() => void handlePublish()}>
+              {batch.status === "published" ? "已发布" : "发布进度数据"}
+            </button>
+          </section>
+        </>
+      )}
+    </div>
+  );
 }
 
 interface ProjectsViewProps {

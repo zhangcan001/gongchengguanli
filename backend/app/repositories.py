@@ -125,7 +125,7 @@ def update_project(
 
 def project_has_related_data(connection: sqlite3.Connection, project_id: int) -> bool:
     _ensure_project_exists(connection, project_id)
-    related_tables = ("smart_inbox", "file_asset")
+    related_tables = ("smart_inbox", "file_asset", "import_batch", "progress_record", "diary_material")
     for table_name in related_tables:
         row = connection.execute(
             f"SELECT 1 FROM {table_name} WHERE project_id = ? LIMIT 1",
