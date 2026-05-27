@@ -34,7 +34,37 @@ import type {
   SmartInboxUploadResult,
 } from "./types";
 
-const API_BASE = "";
+declare global {
+  interface Window {
+    smartWorkbench?: {
+      apiBase?: string;
+      desktop?: {
+        getStatus: () => Promise<DesktopStatus>;
+        createBackup: () => Promise<DesktopBackupResult>;
+        openPath: (targetPath: string) => Promise<DesktopOpenPathResult>;
+      };
+    };
+  }
+}
+
+const API_BASE = window.smartWorkbench?.apiBase ?? "";
+
+export interface DesktopStatus {
+  backendReady: boolean;
+  backendError: string;
+  apiBase: string;
+  dataDir: string;
+}
+
+export interface DesktopBackupResult {
+  backupPath: string;
+  dataDir: string;
+}
+
+export interface DesktopOpenPathResult {
+  ok: boolean;
+  message: string;
+}
 
 async function request<T>(path: string, options?: RequestInit): Promise<T> {
   const headers = new Headers(options?.headers);
@@ -59,6 +89,16 @@ async function request<T>(path: string, options?: RequestInit): Promise<T> {
   }
 
   return response.json() as Promise<T>;
+}
+
+export function resolveApiUrl(path: string | null | undefined): string {
+  if (!path) {
+    return "";
+  }
+  if (/^https?:\/\//i.test(path)) {
+    return path;
+  }
+  return `${API_BASE}${path.startsWith("/") ? path : `/${path}`}`;
 }
 
 export async function fetchProjects(): Promise<Project[]> {
@@ -394,6 +434,24 @@ export async function exportArchivePackage(projectId: number): Promise<ExportFil
 
 export async function openArchivePath(archiveId: number): Promise<ArchiveOpenPath> {
   return request<ArchiveOpenPath>(`/api/archive/open-path?archive_id=${archiveId}`);
+}
+
+export async function fetchDesktopStatus(): Promise<DesktopStatus | null> {
+  return window.smartWorkbench?.desktop?.getStatus?.() ?? null;
+}
+
+export async function createDesktopBackup(): Promise<DesktopBackupResult> {
+  if (!window.smartWorkbench?.desktop?.createBackup) {
+    throw new Error("当前运行环境不支持桌面端备份。");
+  }
+  return window.smartWorkbench.desktop.createBackup();
+}
+
+export async function openDesktopPath(targetPath: string): Promise<DesktopOpenPathResult> {
+  if (!window.smartWorkbench?.desktop?.openPath) {
+    return { ok: false, message: "当前运行环境不支持打开本地路径。" };
+  }
+  return window.smartWorkbench.desktop.openPath(targetPath);
 }
 
 function issueAction(path: string, payload: IssueActionPayload): Promise<Issue> {

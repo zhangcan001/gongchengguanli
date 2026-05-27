@@ -3,22 +3,65 @@
   "private": true,
   "version": "1.0.0",
   "type": "module",
+  "main": "desktop/main.cjs",
   "scripts": {
     "dev": "vite --host 127.0.0.1",
     "build": "tsc -b && vite build",
-    "preview": "vite preview --host 127.0.0.1"
+    "preview": "vite preview --host 127.0.0.1",
+    "desktop:dev": "npm run build && electron .",
+    "desktop:unpacked": "npm run build && node desktop/package-unpacked.cjs",
+    "desktop:pack": "npm run build && electron-builder --win --x64",
+    "desktop:dir": "npm run build && electron-builder --win --x64 --dir"
   },
   "dependencies": {
     "@vitejs/plugin-react": "latest",
-    "vite": "latest",
-    "typescript": "latest",
+    "lucide-react": "latest",
     "react": "latest",
     "react-dom": "latest",
-    "lucide-react": "latest"
+    "typescript": "latest",
+    "vite": "latest"
   },
   "devDependencies": {
     "@types/node": "latest",
     "@types/react": "latest",
-    "@types/react-dom": "latest"
+    "@types/react-dom": "latest",
+    "electron": "^42.3.0",
+    "electron-builder": "^26.8.1"
+  },
+  "build": {
+    "appId": "com.smart-supervision.workbench",
+    "productName": "Smart Supervision Workbench",
+    "directories": {
+      "output": "release"
+    },
+    "files": [
+      "dist/**/*",
+      "desktop/**/*",
+      "package.json"
+    ],
+    "extraResources": [
+      {
+        "from": "../backend/dist/smart-supervision-backend.exe",
+        "to": "backend/smart-supervision-backend.exe"
+      }
+    ],
+    "win": {
+      "target": [
+        {
+          "target": "nsis",
+          "arch": [
+            "x64"
+          ]
+        }
+      ],
+      "artifactName": "Smart-Supervision-Workbench-${version}-setup.${ext}"
+    },
+    "nsis": {
+      "oneClick": false,
+      "allowToChangeInstallationDirectory": true,
+      "createDesktopShortcut": true,
+      "createStartMenuShortcut": true,
+      "shortcutName": "智能工程监理工作台"
+    }
   }
 }
