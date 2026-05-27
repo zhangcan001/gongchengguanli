@@ -6,6 +6,8 @@ import type {
   DiaryConfirmInput,
   DiaryGenerateInput,
   DiaryGenerateResult,
+  DiaryWeatherInput,
+  DiaryWeatherResult,
   DiaryMaterial,
   DiaryMaterialInput,
   DiaryMaterialSummary,
@@ -20,6 +22,8 @@ import type {
   IssueInput,
   IssueSummary,
   ProgressDataQuality,
+  ProgressDashboardV2,
+  ProgressDashboardV2Filters,
   ProgressDelayAnalysis,
   ProgressImportAnalyzeResult,
   ProgressImportBatch,
@@ -191,6 +195,16 @@ export async function fetchProgressDelayAnalysis(projectId: number): Promise<Pro
 
 export async function fetchProgressDataQuality(projectId: number): Promise<ProgressDataQuality> {
   return request<ProgressDataQuality>(`/api/progress/data-quality?project_id=${projectId}`);
+}
+
+export async function fetchProgressDashboardV2(filters: ProgressDashboardV2Filters): Promise<ProgressDashboardV2> {
+  const query = new URLSearchParams();
+  Object.entries(filters).forEach(([key, value]) => {
+    if (value !== undefined && value !== null && value !== "") {
+      query.set(key, String(value));
+    }
+  });
+  return request<ProgressDashboardV2>(`/api/progress/dashboard-v2?${query.toString()}`);
 }
 
 export async function exportProgressAnalysis(projectId: number): Promise<ExportFile> {
@@ -366,6 +380,13 @@ export async function saveAISettings(payload: AISettingsInput): Promise<AISettin
 
 export async function generateDiary(payload: DiaryGenerateInput): Promise<DiaryGenerateResult> {
   return request<DiaryGenerateResult>("/api/diary/generate", {
+    method: "POST",
+    body: JSON.stringify(normalizeObject(payload)),
+  });
+}
+
+export async function fetchDiaryWeather(payload: DiaryWeatherInput): Promise<DiaryWeatherResult> {
+  return request<DiaryWeatherResult>("/api/diary/weather/fetch", {
     method: "POST",
     body: JSON.stringify(normalizeObject(payload)),
   });

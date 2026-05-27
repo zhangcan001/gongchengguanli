@@ -51,6 +51,7 @@ import {
   fetchDiaryMaterialSummary,
   fetchAISettings,
   fetchDiary,
+  fetchDiaryList,
   fetchDesktopStatus,
   exportDiaryWord,
   exportArchivePackage,
@@ -60,6 +61,7 @@ import {
   exportPatrolWord,
   exportProgressAnalysis,
   fetchArchives,
+  fetchDiaryWeather,
   generateDiary,
   openArchivePath,
   openDesktopPath,
@@ -72,7 +74,7 @@ import {
   fetchProject,
   fetchProjects,
   fetchProgressDataQuality,
-  fetchProgressDelayAnalysis,
+  fetchProgressDashboardV2,
   fetchProgressOverview,
   fetchSmartInbox,
   markDiaryMaterialUnused,
@@ -92,6 +94,7 @@ import type {
   AISettings,
   Diary,
   DiaryDraft,
+  DiaryPersonalDraft,
   DiaryMaterial,
   DiaryMaterialSummary,
   DocumentArchive,
@@ -103,7 +106,10 @@ import type {
   IssueInput,
   IssueSummary,
   ProgressDataQuality,
-  ProgressDelayAnalysis,
+  ProgressDashboardV2,
+  DashboardGroupCard,
+  DashboardDelayedTask,
+  FloorHeatmapItem,
   ProgressDelayedTask,
   ProgressOverview,
   ProgressSummaryItem,
@@ -982,9 +988,14 @@ function ProgressDashboardView({
   onOpenInbox: () => void;
 }) {
   const [selectedProjectId, setSelectedProjectId] = useState<number | "">(projects[0]?.id ?? "");
-  const [overview, setOverview] = useState<ProgressOverview | null>(null);
-  const [delayAnalysis, setDelayAnalysis] = useState<ProgressDelayAnalysis | null>(null);
-  const [dataQuality, setDataQuality] = useState<ProgressDataQuality | null>(null);
+  const [dashboard, setDashboard] = useState<ProgressDashboardV2 | null>(null);
+  const [viewMode, setViewMode] = useState<"overview" | "discipline" | "building">("overview");
+  const [dataDate, setDataDate] = useState("");
+  const [batchId, setBatchId] = useState<number | "">("");
+  const [building, setBuilding] = useState("");
+  const [floor, setFloor] = useState("");
+  const [discipline, setDiscipline] = useState("");
+  const [calculationMethod, setCalculationMethod] = useState("");
   const [exportFile, setExportFile] = useState<ExportFile | null>(null);
   const [exporting, setExporting] = useState(false);
   const [loading, setLoading] = useState(false);
@@ -1000,19 +1011,21 @@ function ProgressDashboardView({
     setLoading(true);
     setError("");
     try {
-      const [overviewResult, delayResult, qualityResult] = await Promise.all([
-        fetchProgressOverview(projectId),
-        fetchProgressDelayAnalysis(projectId),
-        fetchProgressDataQuality(projectId),
-      ]);
-      setOverview(overviewResult);
-      setDelayAnalysis(delayResult);
-      setDataQuality(qualityResult);
+      setDashboard(
+        await fetchProgressDashboardV2({
+          project_id: projectId,
+          view_mode: viewMode,
+          data_date: dataDate,
+          batch_id: batchId,
+          building,
+          floor,
+          discipline,
+          calculation_method: calculationMethod,
+        }),
+      );
     } catch (loadError) {
       setError(loadError instanceof Error ? loadError.message : "进度看板加载失败");
-      setOverview(null);
-      setDelayAnalysis(null);
-      setDataQuality(null);
+      setDashboard(null);
     } finally {
       setLoading(false);
     }
@@ -1023,7 +1036,7 @@ function ProgressDashboardView({
       setExportFile(null);
       void loadDashboard(Number(selectedProjectId));
     }
-  }, [selectedProjectId]);
+  }, [selectedProjectId, viewMode, dataDate, batchId, building, floor, discipline, calculationMethod]);
 
   async function handleExportProgressAnalysis() {
     if (!selectedProjectId) {
@@ -1041,14 +1054,17 @@ function ProgressDashboardView({
   }
 
   const noProjects = projects.length === 0;
-  const hasNoProgressData = !loading && overview && !overview.latest_batch && overview.building_summary.length === 0;
+  const overview = dashboard?.overview ?? null;
+  const options = dashboard?.scope.options;
+  const hasNoProgressData = !loading && dashboard && dashboard.overview.item_count === 0;
+  const activeCards = viewMode === "discipline" ? dashboard?.discipline_cards ?? [] : dashboard?.building_cards ?? [];
 
   return (
-    <div className="page-stack">
+    <div className="page-stack dashboard-v2-page">
       <PageHeader
-        eyebrow="阶段 4"
+        eyebrow="Dashboard V2"
         title="进度看板"
-        description="基于已发布 progress_record 展示总体进度、楼栋/专业统计、滞后任务和数据质量提醒。"
+        description="按当前筛选范围统一计算总体、专业、楼栋和楼层热力，优先使用权重归一化统计。"
         action={
           noProjects ? (
             <button className="primary-button" type="button" onClick={onNewProject}>
@@ -1086,11 +1102,88 @@ function ProgressDashboardView({
         </section>
       )}
       {error && <div className="error-banner">{error}</div>}
-      {loading && <section className="panel"><EmptyLine text="正在加载进度看板..." /></section>}
       {exportFile && <ExportResultCard file={exportFile} />}
 
-      {!noProjects && overview && (
+      {!noProjects && (
         <>
+          <section className="panel dashboard-filter-panel">
+            <div className="dashboard-filter-grid">
+              <label className="field compact-field" htmlFor="dash-date">
+                <span>数据日期</span>
+                <select id="dash-date" value={dataDate} onChange={(event) => setDataDate(event.target.value)}>
+                  <option value="">最新日期</option>
+                  {(options?.data_dates ?? []).map((item) => (
+                    <option key={item} value={item}>{item}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field compact-field" htmlFor="dash-method">
+                <span>统计口径</span>
+                <select id="dash-method" value={calculationMethod} onChange={(event) => setCalculationMethod(event.target.value)}>
+                  <option value="">自动推荐</option>
+                  <option value="weighted_percent">权重归一化统计</option>
+                  <option value="percent_average">完成率平均</option>
+                </select>
+              </label>
+              <label className="field compact-field" htmlFor="dash-batch">
+                <span>批次</span>
+                <select id="dash-batch" value={batchId} onChange={(event) => setBatchId(event.target.value ? Number(event.target.value) : "")}>
+                  <option value="">全部批次</option>
+                  {(options?.batches ?? []).map((item) => (
+                    <option key={item.batch_id} value={item.batch_id}>#{item.batch_id} {item.sheet_name}</option>
+                  ))}
+                </select>
+              </label>
+              <label className="field compact-field" htmlFor="dash-discipline">
+                <span>专业</span>
+                <select id="dash-discipline" value={discipline} onChange={(event) => setDiscipline(event.target.value)}>
+                  <option value="">全部专业</option>
+                  {(options?.disciplines ?? []).map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </label>
+              <label className="field compact-field" htmlFor="dash-building">
+                <span>楼栋</span>
+                <select id="dash-building" value={building} onChange={(event) => setBuilding(event.target.value)}>
+                  <option value="">全部楼栋</option>
+                  {(options?.buildings ?? []).map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </label>
+              <label className="field compact-field" htmlFor="dash-floor">
+                <span>楼层</span>
+                <select id="dash-floor" value={floor} onChange={(event) => setFloor(event.target.value)}>
+                  <option value="">全部楼层</option>
+                  {(options?.floors ?? []).map((item) => <option key={item} value={item}>{item}</option>)}
+                </select>
+              </label>
+            </div>
+            <div className="dashboard-filter-actions">
+              <span>{dashboard?.scope.scope_label ?? "当前范围看板"}</span>
+              <button className="ghost-button" type="button" disabled={loading} onClick={() => { setDataDate(""); setBatchId(""); setBuilding(""); setFloor(""); setDiscipline(""); setCalculationMethod(""); }}>
+                重置筛选
+              </button>
+              <button className="primary-button" type="button" disabled={loading || !selectedProjectId} onClick={() => selectedProjectId && void loadDashboard(Number(selectedProjectId))}>
+                {loading ? "查询中..." : "查询"}
+              </button>
+            </div>
+          </section>
+
+          <div className="dashboard-tabs" role="tablist" aria-label="进度看板视图">
+            {(["overview", "discipline", "building"] as const).map((mode) => (
+              <button
+                key={mode}
+                className={viewMode === mode ? "tab-button active" : "tab-button"}
+                type="button"
+                onClick={() => setViewMode(mode)}
+              >
+                {mode === "overview" ? "总体" : mode === "discipline" ? "专业" : "楼栋"}
+              </button>
+            ))}
+          </div>
+
+          {loading && <section className="panel"><EmptyLine text="正在加载 Dashboard V2..." /></section>}
+
+          {dashboard?.scope.message && <div className="warning-banner">{dashboard.scope.message}</div>}
+
           {hasNoProgressData && (
             <section className="panel">
               <EmptyState title="暂无已发布进度" text="上传并发布进度 Excel 后，这里会显示项目进度看板。" />
@@ -1103,72 +1196,174 @@ function ProgressDashboardView({
             </section>
           )}
 
-          {overview.no_calculable_progress && (
+          {overview?.no_calculable_progress && (
             <div className="warning-banner">当前数据缺少实际完成率，无法计算项目进度。</div>
           )}
-          {!overview.no_calculable_progress && overview.overall_planned_percent === null && (
+          {overview && !overview.no_calculable_progress && overview.planned_percent === null && (
             <div className="warning-banner">当前导入数据缺少计划进度，无法判断进度滞后，仅展示实际完成情况。</div>
           )}
 
-          <section className="dashboard-metrics">
-            <MetricCard title="项目总体完成率" value={formatPercent(overview.overall_actual_percent)} hint="优先采用实际完成率" tone="blue" />
-            <MetricCard title="计划完成率" value={formatPercent(overview.overall_planned_percent)} hint="缺失时不判断滞后" tone="cyan" />
-            <MetricCard title="实际完成率" value={formatPercent(overview.overall_actual_percent)} hint={overview.latest_data_date ?? "暂无日期"} tone="green" />
+          {dashboard && overview && (
+            <>
+          <section className="dashboard-metrics dashboard-v2-metrics">
+            <MetricCard title="当前实际进度" value={formatPercent(overview.actual_percent)} hint={overview.data_date ?? "暂无日期"} tone="blue" />
+            <MetricCard title="按计划应完成" value={formatPercent(overview.planned_percent)} hint={overview.calculation_method_name} tone="cyan" />
+            <MetricCard title="权重合计" value={overview.weight_total === null ? "无权重" : String(overview.weight_total)} hint={`参与 ${overview.task_count} 项任务`} tone="green" />
             <MetricCard
               title="偏差"
-              value={formatSignedPercent(overview.deviation)}
-              hint={overview.delay_level ? delayLevelLabels[overview.delay_level] : "无法判断"}
+              value={formatSignedPercent(overview.progress_deviation)}
+              hint={overview.delay_level_label}
               tone={overview.delay_level === "serious_delay" || overview.delay_level === "obvious_delay" ? "risk" : "violet"}
             />
           </section>
 
-          <section className="dashboard-grid">
-            <section className="panel">
-              <div className="list-toolbar">
-                <span>各楼栋完成率</span>
-                <span className="muted-note">{overview.building_summary.length} 个楼栋</span>
-              </div>
-              <SummaryList items={overview.building_summary} />
+          {viewMode === "overview" && (
+            <section className="dashboard-v2-grid">
+              <section className="panel dashboard-hero-panel">
+                <div className="dashboard-progress-orbit">
+                  <strong>{formatPercent(overview.actual_percent)}</strong>
+                  <span>实际进度</span>
+                </div>
+                <div className="compare-bars">
+                  <ProgressMetricBar label="实际" value={overview.actual_percent} />
+                  <ProgressMetricBar label="计划" value={overview.planned_percent} />
+                </div>
+              </section>
+              <section className="panel">
+                <div className="list-toolbar"><span>滞后状态分布</span><span className="muted-note">{overview.task_count} 项</span></div>
+                <div className="delay-distribution-list">
+                  {dashboard.delay_distribution.map((item) => (
+                    <ProgressMetricBar key={item.status} label={`${item.status_label} ${item.count}`} value={overview.task_count ? (item.count / overview.task_count) * 100 : 0} status={item.status} />
+                  ))}
+                </div>
+              </section>
             </section>
+          )}
 
-            <section className="panel">
-              <div className="list-toolbar">
-                <span>各专业完成率</span>
-                <span className="muted-note">{overview.discipline_summary.length} 个专业</span>
+          {viewMode !== "overview" && (
+            <section className="dashboard-card-grid">
+              {activeCards.length === 0 ? (
+                <section className="panel"><EmptyState title="暂无分组数据" text="请检查专业、楼栋或楼层字段是否已导入。" /></section>
+              ) : activeCards.map((card) => <DashboardV2GroupCard key={card.name} card={card} onSelect={() => viewMode === "discipline" ? setDiscipline(card.name) : setBuilding(card.name)} />)}
+            </section>
+          )}
+
+          <section className="dashboard-grid">
+            <section className="panel floor-heatmap-panel">
+              <div className="list-toolbar"><span>楼层热力图</span><span className="muted-note">{dashboard.floor_heatmap.length} 个楼层</span></div>
+              <FloorHeatmap items={dashboard.floor_heatmap} onSelect={(item) => { setBuilding(item.building); setFloor(item.floor); setViewMode("building"); }} />
+            </section>
+            <section className="panel calculation-panel">
+              <div className="list-toolbar"><span>统计口径说明</span><span className="muted-note">{dashboard.calculation_context.calculation_method_name}</span></div>
+              <p>{dashboard.calculation_context.recommendation_reason}</p>
+              <Info label="权重来源" value={dashboard.calculation_context.weight_source ?? "未检测到权重"} />
+              <Info label="权重合计" value={dashboard.calculation_context.weight_total ?? "无"} />
+              <Info label="参与统计" value={`${dashboard.calculation_context.participating_task_count} 项任务`} />
+              <div className="capability-list">
+                {Object.entries(dashboard.dashboard_capabilities).map(([key, capability]) => (
+                  <span className={capability.available ? "capability-chip available" : "capability-chip"} key={key}>{capability.available ? "可用" : "缺少"} · {capability.reason}</span>
+                ))}
               </div>
-              <SummaryList items={overview.discipline_summary} />
             </section>
           </section>
 
           <section className="dashboard-grid">
             <section className="panel">
-              <div className="list-toolbar">
-                <span>滞后任务</span>
-                <span className="muted-note">
-                  {delayAnalysis?.delay_count ?? 0} 项滞后 · {delayAnalysis?.serious_delay_count ?? 0} 项严重
-                </span>
-              </div>
-              <DelayedTaskTable tasks={delayAnalysis?.delayed_tasks ?? []} />
+              <div className="list-toolbar"><span>滞后重点列表</span><span className="muted-note">{dashboard.delayed_tasks.length} 项</span></div>
+              <DashboardV2DelayedTable tasks={dashboard.delayed_tasks} />
             </section>
-
             <section className="panel">
               <div className="list-toolbar">
                 <span>数据质量提醒</span>
-                <span className="muted-note">
-                  {dataQuality?.warning_count ?? 0} warnings · {dataQuality?.error_count ?? 0} errors
-                </span>
+                <span className="muted-note">{dashboard.data_quality.warning_count} warnings · {dashboard.data_quality.error_count} errors</span>
               </div>
-              <QualityList items={[...(dataQuality?.error_items ?? []), ...(dataQuality?.warning_items ?? [])]} />
+              <QualityList items={[...dashboard.data_quality.error_items, ...dashboard.data_quality.warning_items]} />
             </section>
           </section>
-
-          <section className="panel import-summary">
-            <Info label="最新数据日期" value={overview.latest_data_date} />
-            <Info label="滞后等级" value={overview.delay_level ? delayLevelLabels[overview.delay_level] : "无法判断"} />
-            <Info label="最近导入批次" value={overview.latest_batch ? `#${overview.latest_batch.id} ${overview.latest_batch.file_name}` : "暂无"} />
-          </section>
+            </>
+          )}
         </>
       )}
+    </div>
+  );
+}
+
+function ProgressMetricBar({ label, value, status }: { label: string; value: number | null; status?: string }) {
+  const width = Math.max(0, Math.min(100, value ?? 0));
+  return (
+    <div className={`progress-metric-bar status-${status ?? "normal"}`}>
+      <span>{label}</span>
+      <div><i style={{ width: `${width}%` }} /></div>
+      <strong>{formatPercent(value)}</strong>
+    </div>
+  );
+}
+
+function DashboardV2GroupCard({ card, onSelect }: { card: DashboardGroupCard; onSelect: () => void }) {
+  return (
+    <button className={`dashboard-group-card status-${card.status}`} type="button" onClick={onSelect}>
+      <span className="status-dot" />
+      <strong>{card.name}</strong>
+      <ProgressMetricBar label="实际进度" value={card.actual_percent} status={card.status} />
+      <div className="group-card-meta">
+        <span>计划 {formatPercent(card.planned_percent)}</span>
+        <span>偏差 {formatSignedPercent(card.progress_deviation)}</span>
+        <span>任务 {card.task_count}</span>
+        <span>滞后 {card.delayed_count}</span>
+      </div>
+    </button>
+  );
+}
+
+function FloorHeatmap({ items, onSelect }: { items: FloorHeatmapItem[]; onSelect: (item: FloorHeatmapItem) => void }) {
+  if (items.length === 0) {
+    return <EmptyState title="暂无楼层数据" text="导入包含楼栋和楼层字段的进度表后会显示热力图。" />;
+  }
+  return (
+    <div className="floor-heatmap">
+      {items.map((item) => (
+        <button className={`floor-cell status-${item.status}`} type="button" key={`${item.building}-${item.floor}`} onClick={() => onSelect(item)}>
+          <strong>{item.building} {item.floor}</strong>
+          <span>{formatPercent(item.actual_percent)}</span>
+          <small>{item.status_label}</small>
+        </button>
+      ))}
+    </div>
+  );
+}
+
+function DashboardV2DelayedTable({ tasks }: { tasks: DashboardDelayedTask[] }) {
+  if (tasks.length === 0) {
+    return <EmptyLine text="当前筛选范围暂无滞后任务。" />;
+  }
+  return (
+    <div className="table-scroll">
+      <table className="data-table">
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>部位</th>
+            <th>专业</th>
+            <th>计划</th>
+            <th>实际</th>
+            <th>偏差</th>
+            <th>等级</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map((task) => (
+            <tr key={task.id}>
+              <td>{task.task_name || "未填写"}</td>
+              <td>{[task.building, task.floor, task.area].filter(Boolean).join(" ") || "未填写"}</td>
+              <td>{task.discipline || "未填写"}</td>
+              <td>{formatPercent(task.planned_percent)}</td>
+              <td>{formatPercent(task.actual_percent)}</td>
+              <td className="danger-text">{formatSignedPercent(task.progress_deviation)}</td>
+              <td>{task.delay_level_label}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
     </div>
   );
 }
@@ -2284,6 +2479,22 @@ const emptyDiaryDraft: DiaryDraft = {
   tomorrow_plan: "",
 };
 
+const emptyPersonalDraft: DiaryPersonalDraft = {
+  constructionStatus: "",
+  contractorPersonnel: "",
+  machinery: "",
+  inspectionWork: "",
+  materialAcceptance: "",
+  acceptanceWork: "",
+  standingWork: "",
+  meeting: "",
+  internalWork: "",
+  issuesAndActions: "",
+  otherMatters: "",
+  specialistSupervisorComments: "",
+  chiefEngineerComments: "",
+};
+
 const diaryDraftFields: Array<{ key: keyof DiaryDraft; label: string; hint: string }> = [
   { key: "construction_summary", label: "今日施工情况", hint: "进度、施工内容、主要完成事项" },
   { key: "workers_summary", label: "施工人员情况", hint: "人员投入、班组情况" },
@@ -2294,6 +2505,22 @@ const diaryDraftFields: Array<{ key: keyof DiaryDraft; label: string; hint: stri
   { key: "issue_summary", label: "存在问题", hint: "质量、安全、进度、资料问题" },
   { key: "handling_opinion", label: "处理意见", hint: "整改要求、回复、复查意见" },
   { key: "tomorrow_plan", label: "明日重点", hint: "下一日监理关注点" },
+];
+
+const personalDiaryFields: Array<{ key: keyof DiaryPersonalDraft; label: string; hint: string; rows: number; history?: boolean }> = [
+  { key: "constructionStatus", label: "今日施工情况", hint: "施工部位、工序、进展和完成事项", rows: 6 },
+  { key: "contractorPersonnel", label: "承包单位人员投入", hint: "按单位/班组记录人数和到岗情况", rows: 4, history: true },
+  { key: "machinery", label: "承包单位机械投入", hint: "塔吊、泵车、运输设备等机械使用情况", rows: 4, history: true },
+  { key: "inspectionWork", label: "巡视检查工作", hint: "质量、安全、文明施工、整改复查等现场检查", rows: 6, history: true },
+  { key: "materialAcceptance", label: "材料验收 / 见证取样", hint: "无则填“无。”", rows: 3, history: true },
+  { key: "acceptanceWork", label: "验收工作", hint: "工序、分项、隐蔽验收情况", rows: 3, history: true },
+  { key: "standingWork", label: "旁站工作", hint: "旁站部位、工序、时间和结论", rows: 3, history: true },
+  { key: "meeting", label: "会议", hint: "会议名称、参会单位、议题和决议", rows: 3 },
+  { key: "internalWork", label: "内业工作", hint: "资料整理、台账、报表、签认等", rows: 3, history: true },
+  { key: "issuesAndActions", label: "问题与措施 / 建议补充", hint: "问题、整改要求、回复、复查和建议", rows: 4 },
+  { key: "otherMatters", label: "其他事项", hint: "其他需要记录或明日重点事项", rows: 3 },
+  { key: "specialistSupervisorComments", label: "专业监理工程师评语", hint: "可留空，专监审阅时填写", rows: 3 },
+  { key: "chiefEngineerComments", label: "总监理工程师评语", hint: "可留空，总监审阅时填写", rows: 3 },
 ];
 
 function draftFromDiary(diary: Diary): DiaryDraft {
@@ -2310,17 +2537,65 @@ function draftFromDiary(diary: Diary): DiaryDraft {
   };
 }
 
+function personalDraftFromDiary(diary: Diary): DiaryPersonalDraft {
+  return {
+    constructionStatus: diary.construction_status ?? diary.construction_summary ?? "",
+    contractorPersonnel: diary.contractor_personnel ?? diary.workers_summary ?? "",
+    machinery: diary.machinery ?? diary.machinery_summary ?? "",
+    inspectionWork: diary.inspection_work ?? diary.patrol_summary ?? "",
+    materialAcceptance: diary.material_acceptance ?? "",
+    acceptanceWork: diary.acceptance_work ?? "",
+    standingWork: diary.standing_work ?? "",
+    meeting: diary.meeting ?? "",
+    internalWork: diary.internal_work ?? "",
+    issuesAndActions: diary.issues_and_actions ?? diary.issue_summary ?? diary.handling_opinion ?? "",
+    otherMatters: diary.other_matters ?? diary.tomorrow_plan ?? "",
+    specialistSupervisorComments: diary.specialist_supervisor_comments ?? "",
+    chiefEngineerComments: diary.chief_engineer_comments ?? "",
+  };
+}
+
+function legacyDraftFromPersonal(draft: DiaryPersonalDraft): DiaryDraft {
+  return {
+    construction_summary: draft.constructionStatus,
+    workers_summary: draft.contractorPersonnel,
+    machinery_summary: draft.machinery,
+    quality_summary: draft.inspectionWork,
+    safety_summary: draft.inspectionWork,
+    patrol_summary: draft.inspectionWork,
+    issue_summary: draft.issuesAndActions,
+    handling_opinion: draft.issuesAndActions,
+    tomorrow_plan: draft.otherMatters,
+  };
+}
+
+function weekdayText(dateText: string): string {
+  const value = new Date(`${dateText}T00:00:00`);
+  if (Number.isNaN(value.getTime())) {
+    return "";
+  }
+  return `星期${["日", "一", "二", "三", "四", "五", "六"][value.getDay()]}`;
+}
+
 function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; onNewProject: () => void }) {
   const [selectedProjectId, setSelectedProjectId] = useState<number | "">(projects[0]?.id ?? "");
   const [materialDate, setMaterialDate] = useState(localDateInputValue());
+  const [diaryHistory, setDiaryHistory] = useState<Diary[]>([]);
+  const [historyQuery, setHistoryQuery] = useState("");
   const [materials, setMaterials] = useState<DiaryMaterial[]>([]);
   const [summary, setSummary] = useState<DiaryMaterialSummary | null>(null);
   const [existingDiary, setExistingDiary] = useState<Diary | null>(null);
   const [manualContent, setManualContent] = useState("");
-  const [weather, setWeather] = useState("");
+  const [writer, setWriter] = useState("");
+  const [city, setCity] = useState("");
+  const [weatherMorning, setWeatherMorning] = useState("");
+  const [weatherAfternoon, setWeatherAfternoon] = useState("");
   const [temperature, setTemperature] = useState("");
+  const [humidity, setHumidity] = useState("");
+  const [windDirection, setWindDirection] = useState("");
+  const [windPower, setWindPower] = useState("");
   const [manualNote, setManualNote] = useState("");
-  const [draft, setDraft] = useState<DiaryDraft>(emptyDiaryDraft);
+  const [personalDraft, setPersonalDraft] = useState<DiaryPersonalDraft>(emptyPersonalDraft);
   const [aiGenerationId, setAiGenerationId] = useState<number | null>(null);
   const [usedAi, setUsedAi] = useState(false);
   const [editingId, setEditingId] = useState<number | null>(null);
@@ -2328,6 +2603,7 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
   const [loading, setLoading] = useState(false);
   const [working, setWorking] = useState(false);
   const [generating, setGenerating] = useState(false);
+  const [fetchingWeather, setFetchingWeather] = useState(false);
   const [exporting, setExporting] = useState(false);
   const [exportFile, setExportFile] = useState<ExportFile | null>(null);
   const [error, setError] = useState("");
@@ -2346,21 +2622,29 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
     setLoading(true);
     setError("");
     try {
-      const [materialItems, materialSummary, diaryDetail] = await Promise.all([
+      const [materialItems, materialSummary, diaryDetail, historyItems] = await Promise.all([
         fetchDiaryMaterials(Number(selectedProjectId), materialDate),
         fetchDiaryMaterialSummary(Number(selectedProjectId), materialDate),
         fetchDiary(Number(selectedProjectId), materialDate),
+        fetchDiaryList(Number(selectedProjectId)),
       ]);
       setMaterials(materialItems);
       setSummary(materialSummary);
       setExistingDiary(diaryDetail);
+      setDiaryHistory(historyItems);
       setExportFile(null);
       if (diaryDetail) {
-        setDraft(draftFromDiary(diaryDetail));
-        setWeather(diaryDetail.weather ?? "");
+        setPersonalDraft(personalDraftFromDiary(diaryDetail));
+        setWriter(diaryDetail.writer ?? "");
+        setCity(diaryDetail.city ?? "");
+        setWeatherMorning(diaryDetail.weather_morning ?? diaryDetail.weather ?? "");
+        setWeatherAfternoon(diaryDetail.weather_afternoon ?? diaryDetail.weather ?? "");
         setTemperature(diaryDetail.temperature ?? "");
+        setHumidity(diaryDetail.humidity ?? "");
+        setWindDirection(diaryDetail.wind_direction ?? "");
+        setWindPower(diaryDetail.wind_power ?? "");
       } else {
-        setDraft(emptyDiaryDraft);
+        setPersonalDraft(emptyPersonalDraft);
         setAiGenerationId(null);
         setUsedAi(false);
       }
@@ -2369,6 +2653,7 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
       setMaterials([]);
       setSummary(null);
       setExistingDiary(null);
+      setDiaryHistory([]);
     } finally {
       setLoading(false);
     }
@@ -2491,11 +2776,20 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
       const result = await generateDiary({
         project_id: Number(selectedProjectId),
         diary_date: materialDate,
-        weather,
+        weather: weatherMorning || weatherAfternoon,
+        weather_morning: weatherMorning,
+        weather_afternoon: weatherAfternoon,
         temperature,
+        humidity,
+        wind_direction: windDirection,
+        wind_power: windPower,
+        city,
+        writer,
+        mode: "analyze",
+        current_draft: personalDraft,
         manual_note: manualNote,
       });
-      setDraft(result.draft);
+      setPersonalDraft(result.personal_draft);
       setAiGenerationId(result.ai_generation_id);
       setUsedAi(result.used_ai);
       setMessage(result.used_ai ? "AI 已生成监理日志草稿，请编辑确认。" : "AI 未使用，已根据素材池生成模板草稿。");
@@ -2504,6 +2798,67 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
       setError(generateError instanceof Error ? generateError.message : "日志草稿生成失败");
     } finally {
       setGenerating(false);
+    }
+  }
+
+  async function handlePolishDiary() {
+    if (!selectedProjectId) {
+      setError("请先选择项目。");
+      return;
+    }
+    setGenerating(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await generateDiary({
+        project_id: Number(selectedProjectId),
+        diary_date: materialDate,
+        weather: weatherMorning || weatherAfternoon,
+        weather_morning: weatherMorning,
+        weather_afternoon: weatherAfternoon,
+        temperature,
+        humidity,
+        wind_direction: windDirection,
+        wind_power: windPower,
+        city,
+        writer,
+        mode: "polish",
+        current_draft: personalDraft,
+        manual_note: manualNote,
+      });
+      setPersonalDraft(result.personal_draft);
+      setAiGenerationId(result.ai_generation_id);
+      setUsedAi(result.used_ai);
+      setMessage(result.used_ai ? "AI 已润色施工情况和巡视检查字段。" : "AI 未使用，已按当前内容整理字段。");
+    } catch (generateError) {
+      setError(generateError instanceof Error ? generateError.message : "AI 润色失败");
+    } finally {
+      setGenerating(false);
+    }
+  }
+
+  async function handleFetchWeather() {
+    if (!city.trim()) {
+      setError("请先填写城市。");
+      return;
+    }
+    setFetchingWeather(true);
+    setError("");
+    setMessage("");
+    try {
+      const result = await fetchDiaryWeather({ city: city.trim(), diary_date: materialDate });
+      setCity(result.city);
+      setWeatherMorning(result.weather_morning);
+      setWeatherAfternoon(result.weather_afternoon);
+      setTemperature(result.temperature);
+      setHumidity(result.humidity);
+      setWindDirection(result.wind_direction);
+      setWindPower(result.wind_power);
+      setMessage("天气信息已获取，可继续手工调整。");
+    } catch (weatherError) {
+      setError(weatherError instanceof Error ? weatherError.message : "天气获取失败，请手工填写。");
+    } finally {
+      setFetchingWeather(false);
     }
   }
 
@@ -2519,13 +2874,21 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
       const diary = await confirmDiary({
         project_id: Number(selectedProjectId),
         diary_date: materialDate,
-        weather,
+        weather: weatherMorning || weatherAfternoon,
+        weather_morning: weatherMorning,
+        weather_afternoon: weatherAfternoon,
         temperature,
+        humidity,
+        wind_direction: windDirection,
+        wind_power: windPower,
+        city,
+        writer,
         ai_generation_id: aiGenerationId,
-        draft,
+        draft: legacyDraftFromPersonal(personalDraft),
+        personal_draft: personalDraft,
       });
       setExistingDiary(diary);
-      setDraft(draftFromDiary(diary));
+      setPersonalDraft(personalDraftFromDiary(diary));
       setMessage("监理日志已确认保存，素材已标记为已使用。");
       await loadMaterials();
     } catch (confirmError) {
@@ -2535,8 +2898,24 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
     }
   }
 
-  function updateDraftField(field: keyof DiaryDraft, value: string) {
-    setDraft((current) => ({ ...current, [field]: value }));
+  function updatePersonalField(field: keyof DiaryPersonalDraft, value: string) {
+    setPersonalDraft((current) => ({ ...current, [field]: value }));
+  }
+
+  function fieldHistoryOptions(field: keyof DiaryPersonalDraft): Array<{ date: string; value: string }> {
+    const seen = new Set<string>();
+    return diaryHistory
+      .filter((item) => item.diary_date !== materialDate)
+      .map((item) => ({ date: item.diary_date, value: personalDraftFromDiary(item)[field] }))
+      .filter((item) => {
+        const value = item.value.trim();
+        if (!value || seen.has(value)) {
+          return false;
+        }
+        seen.add(value);
+        return true;
+      })
+      .slice(0, 8);
   }
 
   async function handleExportDiary() {
@@ -2557,13 +2936,27 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
 
   const noProjects = projects.length === 0;
   const diaryStatus = existingDiary ? (existingDiary.confirmed ? "已确认" : "已生成未确认") : "未生成";
+  const filteredHistory = diaryHistory.filter((item) => {
+    if (!historyQuery.trim()) {
+      return true;
+    }
+    const haystack = [
+      item.diary_date,
+      item.construction_status,
+      item.construction_summary,
+      item.inspection_work,
+      item.issues_and_actions,
+      item.issue_summary,
+    ].join("\n");
+    return haystack.includes(historyQuery.trim());
+  });
 
   return (
-    <div className="page-stack diary-page">
+    <div className="page-stack diary-page personal-diary-page">
       <PageHeader
-        eyebrow="阶段 8"
-        title="监理日志一键生成"
-        description="基于日志素材池生成监理日志草稿，支持 AI 生成，也支持 AI 不可用时的内置模板兜底；确认后保存为正式 diary 记录。"
+        eyebrow="个人监理日志"
+        title="监理日志工作台"
+        description="历史日志、字段录入、天气、AI 润色、实时预览和 Word 模板导出集中在同一工作台。"
         action={
           noProjects ? (
             <button className="primary-button" type="button" onClick={onNewProject}>
@@ -2613,71 +3006,107 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
             </section>
           )}
 
-          <section className={generating ? "diary-generate-console is-generating" : "diary-generate-console"}>
-            <div className="panel-title">
-              <Sparkles size={20} />
-              <div>
-                <h2>一键生成日志草稿</h2>
-                <span>{usedAi ? "本次草稿来自 AI 生成" : "AI 不可用时自动使用内置模板"}</span>
+          <section className="personal-diary-shell">
+            <aside className="panel diary-history-panel">
+              <div className="list-toolbar"><span>历史日志</span><span className="muted-note">{filteredHistory.length} 条</span></div>
+              <label className="field compact-field" htmlFor="diary-history-search">
+                <span>搜索</span>
+                <input id="diary-history-search" value={historyQuery} onChange={(event) => setHistoryQuery(event.target.value)} placeholder="日期 / 施工 / 问题" />
+              </label>
+              <div className="history-list">
+                {filteredHistory.length === 0 ? (
+                  <EmptyLine text="暂无匹配日志。" />
+                ) : filteredHistory.map((item) => (
+                  <button className={item.diary_date === materialDate ? "history-item active" : "history-item"} type="button" key={item.id} onClick={() => setMaterialDate(item.diary_date)}>
+                    <strong>{item.diary_date}</strong>
+                    <span>{item.weekday || weekdayText(item.diary_date)} · {item.confirmed ? "已确认" : "草稿"}</span>
+                    <small>{item.construction_status || item.construction_summary || "暂无施工情况"}</small>
+                  </button>
+                ))}
               </div>
-            </div>
-            <div className="diary-generate-grid">
-              <label className="field compact-field" htmlFor="diary-weather">
-                <span>天气</span>
-                <input id="diary-weather" value={weather} onChange={(event) => setWeather(event.target.value)} placeholder="晴" />
-              </label>
-              <label className="field compact-field" htmlFor="diary-temperature">
-                <span>温度</span>
-                <input id="diary-temperature" value={temperature} onChange={(event) => setTemperature(event.target.value)} placeholder="25-32℃" />
-              </label>
-              <label className="field compact-field diary-manual-note-field" htmlFor="diary-manual-note">
-                <span>人工补充</span>
-                <textarea
-                  id="diary-manual-note"
-                  value={manualNote}
-                  onChange={(event) => setManualNote(event.target.value)}
-                  placeholder="补充当天整体施工情况、特殊事项或明日重点。"
-                />
-              </label>
-            </div>
-            <div className="diary-generate-actions">
-              <button className="primary-button" type="button" disabled={generating || working} onClick={() => void handleGenerateDiary()}>
-                <Sparkles size={18} />
-                {generating ? "生成中..." : "一键生成"}
-              </button>
-              <button className="ghost-button" type="button" disabled={exporting || !existingDiary?.id} onClick={() => void handleExportDiary()}>
-                <Download size={18} />
-                {exporting ? "导出中..." : "导出 Word"}
-              </button>
-            </div>
+            </aside>
+
+            <section className="diary-center-column">
+              <section className={generating ? "diary-generate-console is-generating" : "diary-generate-console"}>
+                <div className="panel-title">
+                  <Sparkles size={20} />
+                  <div>
+                    <h2>天气与 AI</h2>
+                    <span>{usedAi ? "本次草稿来自 AI 生成" : "AI 不可用时自动使用内置模板"}</span>
+                  </div>
+                </div>
+                <div className="diary-generate-grid personal-weather-grid">
+                  <label className="field compact-field" htmlFor="diary-writer"><span>填写人</span><input id="diary-writer" value={writer} onChange={(event) => setWriter(event.target.value)} placeholder="张灿" /></label>
+                  <label className="field compact-field" htmlFor="diary-city"><span>城市</span><input id="diary-city" value={city} onChange={(event) => setCity(event.target.value)} placeholder="深圳" /></label>
+                  <label className="field compact-field" htmlFor="weather-am"><span>上午天气</span><input id="weather-am" value={weatherMorning} onChange={(event) => setWeatherMorning(event.target.value)} placeholder="晴" /></label>
+                  <label className="field compact-field" htmlFor="weather-pm"><span>下午天气</span><input id="weather-pm" value={weatherAfternoon} onChange={(event) => setWeatherAfternoon(event.target.value)} placeholder="多云" /></label>
+                  <label className="field compact-field" htmlFor="diary-temperature"><span>温度</span><input id="diary-temperature" value={temperature} onChange={(event) => setTemperature(event.target.value)} placeholder="25-32℃" /></label>
+                  <label className="field compact-field" htmlFor="diary-humidity"><span>湿度</span><input id="diary-humidity" value={humidity} onChange={(event) => setHumidity(event.target.value)} placeholder="70%" /></label>
+                  <label className="field compact-field" htmlFor="diary-wind-direction"><span>风向</span><input id="diary-wind-direction" value={windDirection} onChange={(event) => setWindDirection(event.target.value)} placeholder="东南" /></label>
+                  <label className="field compact-field" htmlFor="diary-wind-power"><span>风力</span><input id="diary-wind-power" value={windPower} onChange={(event) => setWindPower(event.target.value)} placeholder="3级" /></label>
+                  <label className="field compact-field diary-manual-note-field" htmlFor="diary-manual-note">
+                    <span>人工补充</span>
+                    <textarea id="diary-manual-note" value={manualNote} onChange={(event) => setManualNote(event.target.value)} placeholder="补充当天整体施工情况、特殊事项或明日重点。" />
+                  </label>
+                </div>
+                <div className="diary-generate-actions">
+                  <button className="ghost-button" type="button" disabled={fetchingWeather} onClick={() => void handleFetchWeather()}><CloudSunIcon />{fetchingWeather ? "获取中..." : "获取天气"}</button>
+                  <button className="ghost-button" type="button" disabled={generating || working} onClick={() => void handlePolishDiary()}><Sparkles size={18} />AI 润色</button>
+                  <button className="primary-button" type="button" disabled={generating || working} onClick={() => void handleGenerateDiary()}><Sparkles size={18} />{generating ? "生成中..." : "AI 分析全部"}</button>
+                  <button className="ghost-button" type="button" disabled={exporting || !existingDiary?.id} onClick={() => void handleExportDiary()}><Download size={18} />{exporting ? "导出中..." : "导出 Word"}</button>
+                </div>
+              </section>
+
+              <section className="panel diary-draft-panel personal-diary-form">
+                <div className="list-toolbar"><span>日志字段录入</span><span className={existingDiary?.confirmed ? "used-flag used" : "used-flag"}>{diaryStatus}</span></div>
+                <div className="personal-diary-fields">
+                  {personalDiaryFields.map((field) => (
+                    <label className="diary-draft-field" key={field.key} htmlFor={`personal-${field.key}`}>
+                      <span>{field.label}</span>
+                      <small>{field.hint}</small>
+                      {field.history && fieldHistoryOptions(field.key).length > 0 && (
+                        <select
+                          aria-label={`${field.label}历史内容`}
+                          value=""
+                          onChange={(event) => {
+                            if (event.target.value) {
+                              updatePersonalField(field.key, event.target.value);
+                            }
+                          }}
+                        >
+                          <option value="">引用历史内容</option>
+                          {fieldHistoryOptions(field.key).map((item) => (
+                            <option key={`${field.key}-${item.date}-${item.value.slice(0, 12)}`} value={item.value}>
+                              {item.date} · {item.value.slice(0, 36)}
+                            </option>
+                          ))}
+                        </select>
+                      )}
+                      <textarea id={`personal-${field.key}`} rows={field.rows} value={personalDraft[field.key]} onChange={(event) => updatePersonalField(field.key, event.target.value)} />
+                    </label>
+                  ))}
+                </div>
+                <div className="form-actions">
+                  <button className="primary-button" type="button" disabled={working || generating} onClick={() => void handleConfirmDiary()}><Save size={18} />{existingDiary?.confirmed ? "更新确认日志" : "确认保存日志"}</button>
+                </div>
+              </section>
+            </section>
+
+            <aside className="panel diary-preview-panel">
+              <PersonalDiaryPreview
+                date={materialDate}
+                writer={writer}
+                weatherMorning={weatherMorning}
+                weatherAfternoon={weatherAfternoon}
+                temperature={temperature}
+                humidity={humidity}
+                windDirection={windDirection}
+                windPower={windPower}
+                draft={personalDraft}
+              />
+            </aside>
           </section>
           {exportFile && <ExportResultCard file={exportFile} />}
-
-          <section className="panel diary-draft-panel">
-            <div className="list-toolbar">
-              <span>日志草稿编辑区</span>
-              <span className={existingDiary?.confirmed ? "used-flag used" : "used-flag"}>{diaryStatus}</span>
-            </div>
-            <div className="diary-draft-grid">
-              {diaryDraftFields.map((field) => (
-                <label className="diary-draft-field" key={field.key} htmlFor={`draft-${field.key}`}>
-                  <span>{field.label}</span>
-                  <small>{field.hint}</small>
-                  <textarea
-                    id={`draft-${field.key}`}
-                    value={draft[field.key]}
-                    onChange={(event) => updateDraftField(field.key, event.target.value)}
-                  />
-                </label>
-              ))}
-            </div>
-            <div className="form-actions">
-              <button className="primary-button" type="button" disabled={working || generating} onClick={() => void handleConfirmDiary()}>
-                <Save size={18} />
-                {existingDiary?.confirmed ? "更新确认日志" : "确认保存日志"}
-              </button>
-            </div>
-          </section>
 
           <section className="diary-workbench">
             <section className="panel diary-manual-panel">
@@ -2760,6 +3189,54 @@ function DiaryMaterialsView({ projects, onNewProject }: { projects: Project[]; o
           </section>
         </>
       )}
+    </div>
+  );
+}
+
+function CloudSunIcon() {
+  return <CalendarDays size={18} />;
+}
+
+function PersonalDiaryPreview({
+  date,
+  writer,
+  weatherMorning,
+  weatherAfternoon,
+  temperature,
+  humidity,
+  windDirection,
+  windPower,
+  draft,
+}: {
+  date: string;
+  writer: string;
+  weatherMorning: string;
+  weatherAfternoon: string;
+  temperature: string;
+  humidity: string;
+  windDirection: string;
+  windPower: string;
+  draft: DiaryPersonalDraft;
+}) {
+  const lines = [
+    `日期：${date}  ${weekdayText(date)}`,
+    `填写人：${writer || "（未填）"}`,
+    "",
+    `天气：上午 ${weatherMorning || "—"}  下午 ${weatherAfternoon || "—"}  气温 ${temperature || "—"}  湿度 ${humidity || "—"}  ${windDirection || "—"}风 ${windPower || "—"}`,
+    "",
+  ];
+  for (const field of personalDiaryFields) {
+    lines.push(`【${field.label}】`);
+    lines.push(draft[field.key] || "（空）");
+    lines.push("");
+  }
+  return (
+    <div className="personal-preview">
+      <div className="preview-head">
+        <p className="eyebrow">实时预览</p>
+        <h2>{date}</h2>
+      </div>
+      <pre>{lines.join("\n")}</pre>
     </div>
   );
 }
@@ -3909,7 +4386,7 @@ function TextField({
   );
 }
 
-function Info({ label, value }: { label: string; value: string | null }) {
+function Info({ label, value }: { label: string; value: string | number | null }) {
   return (
     <div className="info-tile">
       <span>{label}</span>
