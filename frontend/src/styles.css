@@ -3898,6 +3898,14 @@ p {
   background-color: rgba(255, 255, 255, 0.018);
 }
 
+.preview-table tbody tr.row-error td {
+  background-color: rgba(255, 92, 119, 0.08);
+}
+
+.preview-table tbody tr.row-warning td {
+  background-color: rgba(255, 177, 95, 0.07);
+}
+
 .cell-error {
   color: #ffe4e8 !important;
   background: rgba(255, 92, 119, 0.26) !important;

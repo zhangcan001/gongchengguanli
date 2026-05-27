@@ -15,7 +15,8 @@ let backendError = "";
 let dataDir = "";
 
 function userDataDir() {
-  return path.join(app.getPath("userData"), "data");
+  const appDataRoot = process.env.APPDATA || app.getPath("appData");
+  return path.join(appDataRoot, APP_TITLE, "data");
 }
 
 function ensureDataDirectories(root) {
@@ -197,6 +198,16 @@ function startupHtml(status, detail = "") {
       box-shadow: 0 0 18px rgba(30, 232, 214, 0.45);
     }
     .error { color: #ffb4c0; overflow-wrap: anywhere; }
+    .actions { display: flex; gap: 12px; flex-wrap: wrap; margin-top: 22px; }
+    button {
+      min-height: 38px;
+      border: 1px solid rgba(92, 211, 255, 0.36);
+      border-radius: 12px;
+      padding: 0 16px;
+      color: #e7f7ff;
+      background: linear-gradient(135deg, rgba(43, 168, 255, 0.34), rgba(30, 232, 214, 0.18));
+      cursor: pointer;
+    }
     @keyframes move { from { transform: translateX(0); } to { transform: translateX(145%); } }
   </style>
 </head>
@@ -206,6 +217,7 @@ function startupHtml(status, detail = "") {
     <p>${status}</p>
     <p>正在加载工作台...</p>
     ${detail ? `<p class="error">${detail}</p>` : ""}
+    ${detail ? `<div class="actions"><button onclick="window.smartWorkbench?.desktop?.retryStartup?.()">重试启动本地服务</button></div>` : ""}
     <div class="scan"><span></span></div>
   </section>
 </body>
@@ -241,6 +253,31 @@ function showStartupError(detail) {
       startupHtml("后端启动失败，请检查 data/logs/desktop-backend.log。", detail),
     )}`,
   );
+}
+
+async function bootstrapBackend() {
+  backendReady = false;
+  backendError = "";
+  stopBackend();
+  mainWindow.loadURL(`data:text/html;charset=utf-8,${encodeURIComponent(startupHtml("正在启动本地服务..."))}`);
+  if (await isPortInUse()) {
+    backendError = `本地服务端口 ${PORT} 已被占用，请关闭其他智能工程监理工作台窗口，或设置 SMART_SUPERVISION_PORT 后重新启动。`;
+    logLine(`[desktop:port-in-use] ${backendError}`);
+    showStartupError(backendError);
+    dialog.showErrorBox(APP_TITLE, backendError);
+    return;
+  }
+  startBackend();
+  try {
+    await waitForHealth();
+    backendReady = true;
+    await loadFrontend();
+  } catch (error) {
+    backendError = error.message;
+    logLine(`[desktop:error] ${error.stack || error.message}`);
+    showStartupError(error.message);
+    dialog.showErrorBox(APP_TITLE, `本地服务启动失败：${error.message}`);
+  }
 }
 
 async function loadFrontend() {
@@ -308,6 +345,7 @@ ipcMain.handle("desktop:get-status", () => ({
 }));
 
 ipcMain.handle("desktop:create-backup", async () => createBackup());
+ipcMain.handle("desktop:retry-startup", async () => bootstrapBackend());
 
 ipcMain.handle("desktop:open-path", async (_event, targetPath) => {
   if (!targetPath || typeof targetPath !== "string") {
@@ -327,6 +365,10 @@ app.on("window-all-closed", () => {
   app.quit();
 });
 
+process.on("exit", () => {
+  stopBackend();
+});
+
 app.whenReady().then(async () => {
   app.setName(APP_TITLE);
   dataDir = process.env.SMART_SUPERVISION_DATA_DIR || userDataDir();
@@ -334,22 +376,5 @@ app.whenReady().then(async () => {
   ensureDataDirectories(dataDir);
   logLine("[desktop] starting");
   createWindow();
-  if (await isPortInUse()) {
-    backendError = `本地服务端口 ${PORT} 已被占用，请关闭其他智能工程监理工作台窗口，或设置 SMART_SUPERVISION_PORT 后重新启动。`;
-    logLine(`[desktop:port-in-use] ${backendError}`);
-    showStartupError(backendError);
-    dialog.showErrorBox(APP_TITLE, backendError);
-    return;
-  }
-  startBackend();
-  try {
-    await waitForHealth();
-    backendReady = true;
-    await loadFrontend();
-  } catch (error) {
-    backendError = error.message;
-    logLine(`[desktop:error] ${error.stack || error.message}`);
-    showStartupError(error.message);
-    dialog.showErrorBox(APP_TITLE, `本地服务启动失败：${error.message}`);
-  }
+  await bootstrapBackend();
 });

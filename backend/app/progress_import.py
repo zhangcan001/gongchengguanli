@@ -14,6 +14,7 @@ from .excel_analysis import (
     issue_to_dict,
     mapping_to_dict,
     preview_to_dict,
+    stats_to_dict,
 )
 from .models import (
     FieldMappingInput,
@@ -51,6 +52,13 @@ def _json_load(value: str | None) -> Any:
     if not value:
         return []
     return json.loads(value)
+
+
+def _json_load_object(value: str | None) -> dict[str, Any]:
+    if not value:
+        return {}
+    loaded = json.loads(value)
+    return loaded if isinstance(loaded, dict) else {}
 
 
 def _ensure_project_exists(connection: sqlite3.Connection, project_id: int) -> None:
@@ -207,6 +215,7 @@ def _batch_to_detail(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[s
     preview_rows = _json_load(row["preview_rows"])
     warnings = _json_load(row["validation_warnings"])
     errors = _json_load(row["validation_errors"])
+    import_stats = _json_load_object(row["import_stats"])
     mappings = _field_mappings_for_sources(
         connection,
         project_id=row["project_id"],
@@ -227,6 +236,7 @@ def _batch_to_detail(connection: sqlite3.Connection, row: sqlite3.Row) -> dict[s
         "preview_rows": preview_rows,
         "validation_warnings": warnings,
         "validation_errors": errors,
+        "import_stats": import_stats,
         "replacement_required": bool(row["replacement_required"]),
         "created_at": row["created_at"],
         "published_at": row["published_at"],
@@ -252,6 +262,7 @@ def analyze_progress_import(
     preview_rows = [preview_to_dict(row) for row in analysis.preview_rows]
     warnings = [issue_to_dict(issue) for issue in analysis.warnings]
     errors = [issue_to_dict(issue) for issue in analysis.errors]
+    import_stats = stats_to_dict(analysis.stats)
     data_date = analysis.data_date.isoformat()
     replacement_required = _existing_progress_count(connection, project_id=payload.project_id, data_date=data_date) > 0
 
@@ -270,9 +281,10 @@ def analyze_progress_import(
             preview_rows,
             validation_warnings,
             validation_errors,
+            import_stats,
             replacement_required
         )
-        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         """,
         (
             payload.project_id,
@@ -287,6 +299,7 @@ def analyze_progress_import(
             _json_dump(preview_rows),
             _json_dump(warnings),
             _json_dump(errors),
+            _json_dump(import_stats),
             1 if replacement_required else 0,
         ),
     )
@@ -313,6 +326,7 @@ def analyze_progress_import(
         "preview_rows": preview_rows,
         "warnings": warnings,
         "errors": errors,
+        "import_stats": import_stats,
         "replacement_required": replacement_required,
     }
 
@@ -343,28 +357,31 @@ def validate_progress_import(
         )
         for mapping in payload.field_mappings
     ]
-    preview_rows, warnings, errors = ExcelAnalysisService().validate(
+    preview_rows, warnings, errors, stats = ExcelAnalysisService().validate(
         _file_path(settings, inbox_file["file_path"]),
         sheet_name=batch["sheet_name"],
         header_row_index=batch["header_row_index"],
         data_start_row_index=batch["data_start_row_index"],
         mappings=field_mapping_drafts,
+        year_hint=date.fromisoformat(str(batch["data_date"])).year,
     )
 
     preview = [preview_to_dict(row) for row in preview_rows]
     warning_dicts = [issue_to_dict(issue) for issue in warnings]
     error_dicts = [issue_to_dict(issue) for issue in errors]
+    import_stats = stats_to_dict(stats)
     _upsert_field_mappings(connection, project_id=batch["project_id"], data_type=batch["data_type"], mappings=mappings)
     connection.execute(
         """
         UPDATE import_batch
-        SET preview_rows = ?, validation_warnings = ?, validation_errors = ?, status = ?
+        SET preview_rows = ?, validation_warnings = ?, validation_errors = ?, import_stats = ?, status = ?
         WHERE id = ?
         """,
         (
             _json_dump(preview),
             _json_dump(warning_dicts),
             _json_dump(error_dicts),
+            _json_dump(import_stats),
             "validated",
             batch_id,
         ),
@@ -387,6 +404,10 @@ def publish_progress_import(
     if errors:
         raise RepositoryError(ErrorCode.IMPORT_BATCH_HAS_ERRORS, "Import batch has validation errors.")
 
+    preview_rows = _json_load(batch["preview_rows"])
+    if not preview_rows:
+        raise RepositoryError(ErrorCode.IMPORT_BATCH_HAS_ERRORS, "Import batch has no importable progress rows.")
+
     existing_count = _existing_progress_count(connection, project_id=batch["project_id"], data_date=batch["data_date"])
     replacement_required = bool(batch["replacement_required"]) or existing_count > 0
     if replacement_required and not payload.replace_existing:
@@ -398,7 +419,6 @@ def publish_progress_import(
             (batch["project_id"], batch["data_date"]),
         )
 
-    preview_rows = _json_load(batch["preview_rows"])
     inserted = 0
     for preview_row in preview_rows:
         normalized = preview_row.get("normalized", {})

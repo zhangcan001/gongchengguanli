@@ -7,6 +7,7 @@ contextBridge.exposeInMainWorld("smartWorkbench", {
   desktop: {
     getStatus: () => ipcRenderer.invoke("desktop:get-status"),
     createBackup: () => ipcRenderer.invoke("desktop:create-backup"),
+    retryStartup: () => ipcRenderer.invoke("desktop:retry-startup"),
     openPath: (targetPath) => ipcRenderer.invoke("desktop:open-path", targetPath),
   },
 });

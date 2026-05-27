@@ -166,6 +166,14 @@ class PreviewRow(BaseModel):
     issues: list[ValidationIssue] = []
 
 
+class ImportStats(BaseModel):
+    raw_row_count: int = 0
+    skipped_row_count: int = 0
+    importable_row_count: int = 0
+    error_count: int = 0
+    warning_count: int = 0
+
+
 class ProgressImportAnalyzeResponse(BaseModel):
     batch_id: int
     detected_sheet: str
@@ -176,6 +184,7 @@ class ProgressImportAnalyzeResponse(BaseModel):
     preview_rows: list[PreviewRow]
     warnings: list[ValidationIssue]
     errors: list[ValidationIssue]
+    import_stats: ImportStats = Field(default_factory=ImportStats)
     replacement_required: bool = False
 
 
@@ -193,6 +202,7 @@ class ProgressImportBatch(BaseModel):
     preview_rows: list[PreviewRow] = []
     validation_warnings: list[ValidationIssue] = []
     validation_errors: list[ValidationIssue] = []
+    import_stats: ImportStats = Field(default_factory=ImportStats)
     replacement_required: bool = False
     created_at: datetime
     published_at: datetime | None = None

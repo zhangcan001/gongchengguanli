@@ -78,6 +78,7 @@ CREATE TABLE IF NOT EXISTS import_batch (
     preview_rows TEXT NOT NULL DEFAULT '[]',
     validation_warnings TEXT NOT NULL DEFAULT '[]',
     validation_errors TEXT NOT NULL DEFAULT '[]',
+    import_stats TEXT NOT NULL DEFAULT '{}',
     replacement_required INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
     published_at TEXT,
@@ -270,6 +271,7 @@ def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name:
 
 
 def ensure_schema_compatibility(connection: sqlite3.Connection) -> None:
+    _ensure_column(connection, "import_batch", "import_stats", "TEXT NOT NULL DEFAULT '{}'")
     _ensure_column(connection, "progress_record", "weight", "REAL")
     diary_columns = {
         "weekday": "TEXT",

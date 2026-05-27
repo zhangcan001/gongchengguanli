@@ -126,6 +126,14 @@ export interface PreviewRow {
   issues: ValidationIssue[];
 }
 
+export interface ImportStats {
+  raw_row_count: number;
+  skipped_row_count: number;
+  importable_row_count: number;
+  error_count: number;
+  warning_count: number;
+}
+
 export interface ProgressImportAnalyzeResult {
   batch_id: number;
   detected_sheet: string;
@@ -136,6 +144,7 @@ export interface ProgressImportAnalyzeResult {
   preview_rows: PreviewRow[];
   warnings: ValidationIssue[];
   errors: ValidationIssue[];
+  import_stats: ImportStats;
   replacement_required: boolean;
 }
 
@@ -153,6 +162,7 @@ export interface ProgressImportBatch {
   preview_rows: PreviewRow[];
   validation_warnings: ValidationIssue[];
   validation_errors: ValidationIssue[];
+  import_stats: ImportStats;
   replacement_required: boolean;
   created_at: string;
   published_at: string | null;
@@ -705,3 +715,17 @@ export interface Diary {
   updated_at: string;
   project_name: string | null;
 }
+
+export type View =
+  | { name: "home" }
+  | { name: "projects" }
+  | { name: "smart-inbox" }
+  | { name: "progress-import"; batchId: number }
+  | { name: "progress-dashboard" }
+  | { name: "quick-record" }
+  | { name: "issues" }
+  | { name: "diary-materials" }
+  | { name: "archive" }
+  | { name: "settings" }
+  | { name: "new-project" }
+  | { name: "project-detail"; projectId: number };

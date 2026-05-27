@@ -1,25 +1,42 @@
-# 桌面端打包说明
+# v1.0-RC 桌面端打包说明
 
-本阶段采用 Electron 作为桌面壳。当前机器未安装 Rust/Cargo，暂不使用 Tauri；后续如安装 Rust 工具链，可再评估迁移 Tauri。
+本阶段采用 Electron 作为桌面壳，PyInstaller 打包 FastAPI 后端。当前目标是 Windows 可双击试用版：不打开外部浏览器、自动启动本地后端、使用本地数据目录、支持日志、端口提示、关闭进程和一键备份。
 
-## 技术方案
+## 1. 技术方案
 
-- Electron 负责创建桌面窗口，不打开外部浏览器。
-- React + TypeScript 通过 `vite build` 输出到 `frontend/dist`，Electron 直接加载本地 `index.html`。
-- FastAPI 使用 PyInstaller 打成 `smart-supervision-backend.exe`，Electron 启动时作为子进程自动拉起。
-- Electron 关闭窗口时会终止后端子进程。
-- 前端通过 `window.smartWorkbench.apiBase` 请求本地后端，例如 `http://127.0.0.1:8765/api/health`。
-- AI 相关功能仍按已有配置联网调用；无 AI 配置不影响基础业务。
+- Electron 创建独立桌面窗口。
+- React + TypeScript 通过 `vite build` 输出到 `frontend/dist`。
+- Electron 加载本地 `frontend/dist/index.html`。
+- FastAPI 通过 PyInstaller 打包为 `smart-supervision-backend.exe`。
+- Electron 启动时注入 `SMART_SUPERVISION_DATA_DIR`、`SMART_SUPERVISION_HOST`、`SMART_SUPERVISION_PORT`。
+- 前端通过 `window.smartWorkbench.apiBase` 访问本地后端。
+- 关闭窗口或退出应用时，Electron 会终止后端子进程。
 
-## 数据目录
+## 2. 环境准备
+
+后端：
+
+```powershell
+cd backend
+python -m venv .venv
+.\.venv\Scripts\python.exe -m pip install -r requirements.txt
+.\.venv\Scripts\python.exe -m pip install pyinstaller
+```
+
+前端：
+
+```powershell
+cd frontend
+npm install
+```
+
+## 3. 数据目录
 
 桌面端默认数据目录：
 
 ```text
 %APPDATA%\智能工程监理工作台\data
 ```
-
-Electron 启动后会向后端注入 `SMART_SUPERVISION_DATA_DIR`，后端数据库、上传、导出、归档、日志都会写入该目录。
 
 目录结构：
 
@@ -34,102 +51,184 @@ data/backups
 data/logs
 ```
 
-可通过环境变量覆盖：
+可用环境变量覆盖：
 
 ```powershell
 $env:SMART_SUPERVISION_DATA_DIR="D:\SmartSupervisionData"
 ```
 
-## 开发环境启动
+注意：桌面端不应把用户数据写入项目源码目录。
+
+## 4. 日志文件
+
+桌面壳日志：
+
+```text
+%APPDATA%\智能工程监理工作台\data\logs\desktop-shell.log
+```
+
+后端日志：
+
+```text
+%APPDATA%\智能工程监理工作台\data\logs\desktop-backend.log
+```
+
+日志会脱敏常见 `api_key`、`authorization`、`token` 字段。
+
+## 5. 开发环境启动
 
 后端开发服务：
 
 ```powershell
 cd backend
-.\.venv\Scripts\python.exe desktop_server.py
+.\.venv\Scripts\python.exe -m uvicorn app.main:app --host 127.0.0.1 --port 8000
 ```
 
 桌面端开发启动：
 
 ```powershell
 cd frontend
-npm.cmd run desktop:dev
+npm run desktop:dev
 ```
 
-## 打包命令
+`desktop:dev` 会先构建前端，再打开 Electron。开发桌面端默认尝试通过 `backend/.venv/Scripts/python.exe desktop_server.py` 启动后端；如不存在则使用系统 `python`。
 
-先打包后端：
+## 6. 后端 exe 打包
 
 ```powershell
 cd backend
 python -m PyInstaller desktop_build.spec --clean --noconfirm
 ```
 
-再打包桌面端：
-
-```powershell
-cd frontend
-npm.cmd run desktop:pack
-```
-
-如果 Electron Builder 在下载或解包 Electron runtime 时卡住，可先使用解包版命令生成可双击运行的桌面目录：
-
-```powershell
-cd frontend
-$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
-node .\node_modules\electron\install.js
-npm.cmd run desktop:unpacked
-```
-
-## 输出路径
-
-后端 exe：
+输出：
 
 ```text
 backend/dist/smart-supervision-backend.exe
 ```
 
-Windows 安装包：
+直接验证后端 exe：
 
-```text
-frontend/release/Smart-Supervision-Workbench-1.0.0-setup.exe
+```powershell
+$env:SMART_SUPERVISION_DATA_DIR="$env:TEMP\smart-supervision-rc-data"
+.\dist\smart-supervision-backend.exe
 ```
 
-解包版 exe：
+另开终端：
+
+```powershell
+Invoke-RestMethod http://127.0.0.1:8765/api/health
+```
+
+## 7. 前端构建
+
+```powershell
+cd frontend
+npm run build
+```
+
+输出：
+
+```text
+frontend/dist
+```
+
+## 8. Electron 解包版
+
+```powershell
+cd frontend
+npm run desktop:dir
+```
+
+输出：
 
 ```text
 frontend/release/win-unpacked/智能工程监理工作台.exe
 ```
 
-安装后的主程序位于安装目录内，双击即可打开桌面窗口。
+解包版可直接双击试用，适合 RC 内测。
 
-## 一键备份
+## 9. Electron 安装包
 
-桌面端“系统设置”页提供“一键备份”入口。备份文件保存到：
+```powershell
+cd frontend
+npm run desktop:pack
+```
+
+输出：
+
+```text
+frontend/release/Smart-Supervision-Workbench-1.0.0-setup.exe
+```
+
+说明：安装包文件名来自 `package.json` 的 `1.0.0`，本次发布候选标识为文档中的 `v1.0-RC`。
+
+## 10. 网络下载问题
+
+如 Electron Builder 下载或解包 Electron runtime 卡住，可设置镜像：
+
+```powershell
+cd frontend
+$env:ELECTRON_MIRROR="https://npmmirror.com/mirrors/electron/"
+node .\node_modules\electron\install.js
+npm run desktop:dir
+```
+
+若安装包生成受网络或安全软件影响，可先交付 `win-unpacked` 解包版。
+
+## 11. 端口和启动失败
+
+默认端口：
+
+```text
+127.0.0.1:8765
+```
+
+如端口被占用，桌面端会显示明确提示，并弹出错误框。可关闭其他工作台窗口，或设置：
+
+```powershell
+$env:SMART_SUPERVISION_PORT="8877"
+```
+
+后端超过启动等待时间仍不可用时，启动页会显示错误和“重试启动本地服务”按钮。
+
+## 12. 一键备份
+
+桌面端“系统设置”页提供“一键备份”。
+
+备份保存到：
 
 ```text
 %APPDATA%\智能工程监理工作台\data\backups
 ```
 
-文件格式为 `.tar.gz`，内容包含当前数据目录中的数据库、上传、导出、归档、模板和日志，备份目录自身会被排除。
+备份内容包含数据库、上传、导出、归档、模板和日志；`backups` 目录自身会被排除，避免递归打包。
 
-## 常见问题
+## 13. RC 验收清单
 
-1. 启动停留在“正在启动本地服务...”
-   - 查看 `%APPDATA%\智能工程监理工作台\data\logs\desktop-shell.log`
-   - 查看 `%APPDATA%\智能工程监理工作台\data\logs\desktop-backend.log`
+- `backend/dist/smart-supervision-backend.exe` 存在。
+- `npm run build` 通过。
+- `npm run desktop:dir` 通过。
+- 双击 `win-unpacked/智能工程监理工作台.exe` 可打开窗口。
+- 不打开外部浏览器。
+- `/api/health` 可用。
+- 数据目录自动创建。
+- 上传、导出、归档目录可写。
+- 关闭窗口后后端进程退出。
+- 系统设置页一键备份可用。
 
-2. `/api/health` 不通
-   - 确认本机 `127.0.0.1:8765` 未被其他进程占用。
-   - 开发环境可设置 `SMART_SUPERVISION_PORT` 更换端口。
+## 14. 常见问题
 
-3. 打包失败提示找不到后端 exe
-   - 先执行后端 PyInstaller 打包，确认 `backend/dist/smart-supervision-backend.exe` 存在。
+1. 打包失败提示缺少后端 exe  
+   先执行后端 PyInstaller 打包，并确认 `backend/dist/smart-supervision-backend.exe` 存在。
 
-4. 文件导出或上传路径异常
-   - 确认数据目录有写入权限。
-   - 桌面端不要依赖项目开发目录，统一使用 `SMART_SUPERVISION_DATA_DIR` 或默认应用数据目录。
+2. 启动页提示本地服务失败  
+   查看 `desktop-shell.log` 和 `desktop-backend.log`，确认端口、权限和后端 exe 是否存在。
 
-5. Electron Builder 长时间停留在 `unpack-electron` 或 `rcedit`
-   - 设置 `ELECTRON_MIRROR` 后重新执行 `node .\node_modules\electron\install.js`。
-   - 如仍受网络影响，执行 `npm.cmd run desktop:unpacked` 先生成可运行的解包版 exe。
+3. 杀毒软件拦截  
+   当前 RC 未签名，部分安全软件可能拦截，请加入信任或使用开发环境验证。
+
+4. 一键备份失败  
+   确认 Windows 环境存在 `tar` 命令，并检查数据目录写入权限。
+
+5. 文件路径打不开  
+   如果在浏览器开发环境中使用，系统无法直接调用 Electron 打开路径；请在桌面端验证。

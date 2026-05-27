@@ -46,6 +46,7 @@
       }
     ],
     "win": {
+      "executableName": "智能工程监理工作台",
       "target": [
         {
           "target": "nsis",

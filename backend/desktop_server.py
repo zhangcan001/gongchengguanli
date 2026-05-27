@@ -12,8 +12,8 @@ def _default_data_dir() -> Path:
         return Path(configured)
     app_data = os.getenv("APPDATA")
     if app_data:
-        return Path(app_data) / "SmartSupervisionWorkbench" / "data"
-    return Path.home() / "SmartSupervisionWorkbench" / "data"
+        return Path(app_data) / "智能工程监理工作台" / "data"
+    return Path.home() / "智能工程监理工作台" / "data"
 
 
 def _configure_logging(data_dir: Path) -> None:
