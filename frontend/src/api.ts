@@ -1,8 +1,11 @@
 import type {
   FieldMapping,
+  ProgressDataQuality,
+  ProgressDelayAnalysis,
   ProgressImportAnalyzeResult,
   ProgressImportBatch,
   ProgressImportPublishResult,
+  ProgressOverview,
   Project,
   ProjectInput,
   SmartInboxItem,
@@ -114,6 +117,18 @@ export async function fetchImportBatch(batchId: number): Promise<ProgressImportB
 
 export async function fetchImportBatches(): Promise<ProgressImportBatch[]> {
   return request<ProgressImportBatch[]>("/api/progress/import-batches");
+}
+
+export async function fetchProgressOverview(projectId: number): Promise<ProgressOverview> {
+  return request<ProgressOverview>(`/api/progress/overview?project_id=${projectId}`);
+}
+
+export async function fetchProgressDelayAnalysis(projectId: number): Promise<ProgressDelayAnalysis> {
+  return request<ProgressDelayAnalysis>(`/api/progress/delay-analysis?project_id=${projectId}`);
+}
+
+export async function fetchProgressDataQuality(projectId: number): Promise<ProgressDataQuality> {
+  return request<ProgressDataQuality>(`/api/progress/data-quality?project_id=${projectId}`);
 }
 
 function normalizePayload<T extends Partial<ProjectInput>>(payload: T): Partial<ProjectInput> {

@@ -168,3 +168,87 @@ class ProgressImportPublishResponse(BaseModel):
     status: str
     published_records: int
     replaced_existing: bool
+
+
+class ProgressSummaryItem(BaseModel):
+    label: str
+    actual_percent: float | None = None
+    planned_percent: float | None = None
+    deviation: float | None = None
+    delay_level: str | None = None
+    record_count: int
+
+
+class LatestProgressBatch(BaseModel):
+    id: int
+    project_id: int
+    data_date: date
+    file_name: str
+    sheet_name: str
+    status: str
+    created_at: datetime
+    published_at: datetime | None = None
+
+
+class ProgressDataQualityItem(BaseModel):
+    severity: str
+    record_id: int
+    batch_id: int
+    data_date: date | None = None
+    field: str
+    message: str
+    building: str | None = None
+    floor: str | None = None
+    discipline: str | None = None
+    task_name: str | None = None
+
+
+class ProgressOverviewResponse(BaseModel):
+    project_id: int
+    latest_data_date: date | None = None
+    overall_actual_percent: float | None = None
+    overall_planned_percent: float | None = None
+    deviation: float | None = None
+    delay_level: str | None = None
+    no_calculable_progress: bool
+    data_quality_warnings: list[ProgressDataQualityItem]
+    building_summary: list[ProgressSummaryItem]
+    discipline_summary: list[ProgressSummaryItem]
+    latest_batch: LatestProgressBatch | None = None
+
+
+class ProgressDelayedTask(BaseModel):
+    id: int
+    batch_id: int
+    data_date: date | None = None
+    building: str | None = None
+    floor: str | None = None
+    area: str | None = None
+    discipline: str | None = None
+    task_name: str | None = None
+    planned_percent: float | None = None
+    actual_percent: float | None = None
+    deviation: float
+    delay_level: str | None = None
+    remark: str | None = None
+
+
+class ProgressDelayGroup(BaseModel):
+    label: str
+    delay_count: int
+    serious_delay_count: int
+
+
+class ProgressDelayAnalysisResponse(BaseModel):
+    delayed_tasks: list[ProgressDelayedTask]
+    delay_count: int
+    serious_delay_count: int
+    by_building: list[ProgressDelayGroup]
+    by_discipline: list[ProgressDelayGroup]
+
+
+class ProgressDataQualityResponse(BaseModel):
+    warning_count: int
+    error_count: int
+    warning_items: list[ProgressDataQualityItem]
+    error_items: list[ProgressDataQualityItem]

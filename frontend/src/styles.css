@@ -466,6 +466,13 @@ p {
   font-size: 26px;
 }
 
+.status-card small {
+  display: block;
+  margin-top: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
 .status-card.blue .status-icon {
   color: var(--blue);
 }
@@ -480,6 +487,29 @@ p {
 
 .status-card.violet .status-icon {
   color: var(--violet);
+}
+
+.risk-summary-card {
+  display: grid;
+  width: 100%;
+  gap: 8px;
+  margin-top: 18px;
+  border: 1px solid rgba(255, 92, 119, 0.42);
+  border-radius: 16px;
+  padding: 18px;
+  color: var(--text);
+  background: rgba(255, 92, 119, 0.12);
+  text-align: left;
+  box-shadow: 0 0 28px rgba(255, 92, 119, 0.12);
+}
+
+.risk-summary-card strong {
+  color: #ffd5dc;
+  font-size: 18px;
+}
+
+.risk-summary-card span {
+  color: #ffb4c0;
 }
 
 .page-stack {
@@ -636,6 +666,169 @@ p {
   min-height: 36px;
   padding: 0 12px;
   white-space: nowrap;
+}
+
+.dashboard-project-select {
+  width: min(320px, 100%);
+  margin: 0;
+}
+
+.dashboard-metrics {
+  display: grid;
+  grid-template-columns: repeat(4, minmax(0, 1fr));
+  gap: 16px;
+}
+
+.metric-card {
+  min-height: 138px;
+  border: 1px solid var(--line);
+  border-radius: 18px;
+  padding: 18px;
+  background:
+    linear-gradient(135deg, rgba(10, 31, 55, 0.86), rgba(5, 18, 33, 0.72)),
+    radial-gradient(circle at 82% 20%, rgba(43, 168, 255, 0.12), transparent 28%);
+  box-shadow: 0 18px 54px rgba(0, 0, 0, 0.24);
+}
+
+.metric-card span,
+.metric-card small {
+  display: block;
+  color: var(--muted);
+}
+
+.metric-card strong {
+  display: block;
+  margin-top: 18px;
+  color: var(--text);
+  font-size: 34px;
+  line-height: 1;
+}
+
+.metric-card small {
+  margin-top: 10px;
+  font-size: 12px;
+}
+
+.metric-card.blue {
+  border-color: rgba(43, 168, 255, 0.36);
+}
+
+.metric-card.cyan {
+  border-color: rgba(30, 232, 214, 0.34);
+}
+
+.metric-card.green {
+  border-color: rgba(84, 226, 155, 0.32);
+}
+
+.metric-card.violet {
+  border-color: rgba(140, 125, 255, 0.32);
+}
+
+.metric-card.risk {
+  border-color: rgba(255, 92, 119, 0.48);
+  background:
+    linear-gradient(135deg, rgba(76, 20, 34, 0.72), rgba(5, 18, 33, 0.76)),
+    radial-gradient(circle at 82% 20%, rgba(255, 92, 119, 0.16), transparent 28%);
+}
+
+.warning-banner {
+  border: 1px solid rgba(255, 155, 69, 0.42);
+  border-radius: 14px;
+  padding: 13px 15px;
+  color: #ffe3c4;
+  background: rgba(255, 155, 69, 0.12);
+}
+
+.dashboard-grid {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 18px;
+}
+
+.summary-list {
+  display: grid;
+  gap: 12px;
+  margin-top: 18px;
+}
+
+.summary-row {
+  display: grid;
+  grid-template-columns: minmax(150px, 0.85fr) minmax(180px, 1fr);
+  align-items: center;
+  gap: 14px;
+  border: 1px solid rgba(79, 206, 255, 0.18);
+  border-radius: 14px;
+  padding: 14px;
+  background: rgba(6, 21, 38, 0.64);
+}
+
+.summary-row strong,
+.summary-row span {
+  display: block;
+}
+
+.summary-row strong {
+  color: var(--text);
+}
+
+.summary-row span {
+  margin-top: 6px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.summary-progress {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px;
+}
+
+.summary-bar {
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, 0.08);
+}
+
+.summary-bar span {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--blue), var(--cyan));
+  box-shadow: 0 0 16px rgba(30, 232, 214, 0.26);
+}
+
+.delay-serious {
+  border-color: rgba(255, 92, 119, 0.46) !important;
+  background: rgba(255, 92, 119, 0.1) !important;
+}
+
+.delay-obvious {
+  border-color: rgba(255, 155, 69, 0.48) !important;
+  background: rgba(255, 155, 69, 0.1) !important;
+}
+
+.delay-slight {
+  border-color: rgba(255, 206, 94, 0.38) !important;
+  background: rgba(255, 206, 94, 0.08) !important;
+}
+
+.compact-table-wrap {
+  max-height: 420px;
+}
+
+.dashboard-table {
+  min-width: 860px;
+}
+
+.dashboard-table tr.delay-serious td {
+  background: rgba(255, 92, 119, 0.12);
+}
+
+.dashboard-table tr.delay-obvious td {
+  background: rgba(255, 155, 69, 0.12);
 }
 
 .import-summary {
@@ -1021,6 +1214,11 @@ p {
     grid-template-columns: repeat(2, minmax(0, 1fr));
   }
 
+  .dashboard-metrics,
+  .dashboard-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
   .hero-panel {
     grid-template-columns: 1fr;
   }
@@ -1056,11 +1254,14 @@ p {
 
   .home-grid,
   .status-grid,
+  .dashboard-metrics,
+  .dashboard-grid,
   .form-grid,
   .detail-grid,
   .import-summary,
   .mapping-grid,
-  .mapping-row {
+  .mapping-row,
+  .summary-row {
     grid-template-columns: 1fr;
   }
 

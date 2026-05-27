@@ -10,18 +10,22 @@ from .database import get_connection, initialize_database
 from .errors import ErrorCode
 from .models import (
     HealthResponse,
+    ProgressDataQualityResponse,
+    ProgressDelayAnalysisResponse,
     ProgressImportAnalyzeRequest,
     ProgressImportAnalyzeResponse,
     ProgressImportBatch,
     ProgressImportPublishRequest,
     ProgressImportPublishResponse,
     ProgressImportValidateRequest,
+    ProgressOverviewResponse,
     Project,
     ProjectCreate,
     ProjectUpdate,
     SmartInboxItem,
     SmartInboxUploadResponse,
 )
+from .progress_analytics import ProgressAnalyticsService
 from .progress_import import (
     analyze_progress_import,
     get_import_batch_detail,
@@ -49,6 +53,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         yield
 
     app = FastAPI(title="智能工程监理工作台 API", version="1.0-smart", lifespan=lifespan)
+    app.state.settings = app_settings
 
     app.add_middleware(
         CORSMiddleware,
@@ -204,6 +209,36 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         try:
             return get_import_batch_detail(connection, batch_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/progress/overview", response_model=ProgressOverviewResponse)
+    def api_progress_overview(
+        project_id: int = Query(...),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ProgressAnalyticsService(connection).get_overview(project_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/progress/delay-analysis", response_model=ProgressDelayAnalysisResponse)
+    def api_progress_delay_analysis(
+        project_id: int = Query(...),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ProgressAnalyticsService(connection).get_delay_analysis(project_id)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.get("/api/progress/data-quality", response_model=ProgressDataQualityResponse)
+    def api_progress_data_quality(
+        project_id: int = Query(...),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ProgressAnalyticsService(connection).get_data_quality(project_id)
         except RepositoryError as error:
             handle_repository_error(error)
 

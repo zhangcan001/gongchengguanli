@@ -11,6 +11,7 @@ import {
   FileUp,
   FileText,
   Gauge,
+  BarChart3,
   Home,
   Inbox,
   Layers3,
@@ -32,18 +33,33 @@ import {
   fetchImportBatch,
   fetchProject,
   fetchProjects,
+  fetchProgressDataQuality,
+  fetchProgressDelayAnalysis,
+  fetchProgressOverview,
   fetchSmartInbox,
   publishProgressImport,
   uploadSmartInboxFile,
   validateProgressImport,
 } from "./api";
-import type { FieldMapping, ProgressImportBatch, Project, ProjectInput, SmartInboxItem } from "./types";
+import type {
+  FieldMapping,
+  ProgressDataQuality,
+  ProgressDelayAnalysis,
+  ProgressDelayedTask,
+  ProgressOverview,
+  ProgressSummaryItem,
+  ProgressImportBatch,
+  Project,
+  ProjectInput,
+  SmartInboxItem,
+} from "./types";
 
 type View =
   | { name: "home" }
   | { name: "projects" }
   | { name: "smart-inbox" }
   | { name: "progress-import"; batchId: number }
+  | { name: "progress-dashboard" }
   | { name: "new-project" }
   | { name: "project-detail"; projectId: number };
 
@@ -70,6 +86,7 @@ function App() {
   const [view, setView] = useState<View>({ name: "home" });
   const [projects, setProjects] = useState<Project[]>([]);
   const [inboxItems, setInboxItems] = useState<SmartInboxItem[]>([]);
+  const [homeProgressOverview, setHomeProgressOverview] = useState<ProgressOverview | null>(null);
   const [loadingProjects, setLoadingProjects] = useState(false);
   const [loadingInbox, setLoadingInbox] = useState(false);
   const [projectError, setProjectError] = useState("");
@@ -115,6 +132,31 @@ function App() {
     void loadInbox();
   }, []);
 
+  useEffect(() => {
+    const projectId = projects[0]?.id;
+    if (!projectId) {
+      setHomeProgressOverview(null);
+      return;
+    }
+
+    let active = true;
+    fetchProgressOverview(projectId)
+      .then((overview) => {
+        if (active) {
+          setHomeProgressOverview(overview);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          setHomeProgressOverview(null);
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, [projects]);
+
   function navigate(nextView: View) {
     setView(nextView);
     if (nextView.name === "projects") {
@@ -157,6 +199,14 @@ function App() {
         >
           <Inbox size={20} />
         </button>
+        <button
+          className={view.name === "progress-dashboard" ? "rail-button active" : "rail-button"}
+          type="button"
+          onClick={() => navigate({ name: "progress-dashboard" })}
+          title="进度看板"
+        >
+          <BarChart3 size={20} />
+        </button>
       </aside>
 
       <section className="workspace">
@@ -165,9 +215,11 @@ function App() {
             today={today}
             projects={projects}
             inboxItems={inboxItems}
+            progressOverview={homeProgressOverview}
             onOpenProjects={() => navigate({ name: "projects" })}
             onNewProject={() => navigate({ name: "new-project" })}
             onOpenInbox={() => navigate({ name: "smart-inbox" })}
+            onOpenProgressDashboard={() => navigate({ name: "progress-dashboard" })}
           />
         )}
         {view.name === "smart-inbox" && (
@@ -189,6 +241,13 @@ function App() {
             onPublished={() => {
               void loadInbox();
             }}
+          />
+        )}
+        {view.name === "progress-dashboard" && (
+          <ProgressDashboardView
+            projects={projects}
+            onNewProject={() => navigate({ name: "new-project" })}
+            onOpenInbox={() => navigate({ name: "smart-inbox" })}
           />
         )}
         {view.name === "projects" && (
@@ -229,14 +288,29 @@ interface HomeViewProps {
   today: string;
   projects: Project[];
   inboxItems: SmartInboxItem[];
+  progressOverview: ProgressOverview | null;
   onOpenProjects: () => void;
   onNewProject: () => void;
   onOpenInbox: () => void;
+  onOpenProgressDashboard: () => void;
 }
 
-function HomeView({ today, projects, inboxItems, onOpenProjects, onNewProject, onOpenInbox }: HomeViewProps) {
+function HomeView({
+  today,
+  projects,
+  inboxItems,
+  progressOverview,
+  onOpenProjects,
+  onNewProject,
+  onOpenInbox,
+  onOpenProgressDashboard,
+}: HomeViewProps) {
   const activeCount = projects.filter((project) => project.status === "active").length;
   const pendingItems = inboxItems.filter((item) => item.status === "pending");
+  const progressValue = progressOverview?.no_calculable_progress
+    ? "无法计算"
+    : formatPercent(progressOverview?.overall_actual_percent);
+  const progressHint = progressOverview?.latest_data_date ? `最新数据 ${progressOverview.latest_data_date}` : "暂无已发布进度";
 
   return (
     <div className="home-grid">
@@ -244,10 +318,10 @@ function HomeView({ today, projects, inboxItems, onOpenProjects, onNewProject, o
         <div className="hero-copy">
           <div className="eyebrow">
             <Sparkles size={16} />
-            阶段 3 进度智能导入
+            阶段 4 进度看板与数据质量
           </div>
           <h1>智能工程监理工作台</h1>
-          <p>进度 Excel 进入识别、映射、预览、校验和发布流程；正式进度数据必须由你确认后写入。</p>
+          <p>已发布进度数据可进入看板，查看项目完成率、楼栋/专业统计、滞后任务和数据质量提醒。</p>
           <div className="hero-actions">
             <button className="primary-button" type="button" onClick={onOpenInbox}>
               <UploadCloud size={18} />
@@ -260,6 +334,10 @@ function HomeView({ today, projects, inboxItems, onOpenProjects, onNewProject, o
             <button className="ghost-button" type="button" onClick={onOpenProjects}>
               <Building2 size={18} />
               查看项目
+            </button>
+            <button className="ghost-button" type="button" onClick={onOpenProgressDashboard}>
+              <BarChart3 size={18} />
+              进度看板
             </button>
           </div>
         </div>
@@ -280,7 +358,7 @@ function HomeView({ today, projects, inboxItems, onOpenProjects, onNewProject, o
           <Bot size={20} />
           <div>
             <h2>智能输入区</h2>
-            <span>阶段 3 进度表识别入口</span>
+            <span>进度表投递与发布入口</span>
           </div>
         </div>
         <button className="input-placeholder inbox-entry" type="button" onClick={onOpenInbox}>
@@ -333,7 +411,14 @@ function HomeView({ today, projects, inboxItems, onOpenProjects, onNewProject, o
             <span>暂无风险</span>
           </div>
         </div>
-        <EmptyLine text="进度、质量、安全风险将在后续业务数据接入后展示。" />
+        {progressOverview?.delay_level === "serious_delay" || progressOverview?.delay_level === "obvious_delay" ? (
+          <button className="risk-summary-card" type="button" onClick={onOpenProgressDashboard}>
+            <strong>{delayLevelLabels[progressOverview.delay_level]}</strong>
+            <span>偏差 {formatSignedPercent(progressOverview.deviation)}，请查看进度看板。</span>
+          </button>
+        ) : (
+          <EmptyLine text="进度、质量、安全风险将在后续业务数据接入后展示。" />
+        )}
       </section>
 
       <section className="panel ai-panel">
@@ -348,7 +433,7 @@ function HomeView({ today, projects, inboxItems, onOpenProjects, onNewProject, o
       </section>
 
       <section className="status-grid">
-        <StatusCard icon={<Gauge size={22} />} title="进度状态" value={`${activeCount} 个项目`} tone="blue" />
+        <StatusCard icon={<Gauge size={22} />} title="进度状态" value={progressValue} tone="blue" note={progressHint} />
         <StatusCard icon={<CheckCircle2 size={22} />} title="质量状态" value="待接入" tone="cyan" />
         <StatusCard icon={<ShieldCheck size={22} />} title="安全状态" value="待接入" tone="green" />
         <StatusCard icon={<FileText size={22} />} title="资料状态" value="待接入" tone="violet" />
@@ -365,6 +450,280 @@ const inboxStatusLabels: Record<string, string> = {
   rejected: "已驳回",
   failed: "失败",
 };
+
+const delayLevelLabels: Record<string, string> = {
+  normal_or_ahead: "正常或超前",
+  slight_delay: "轻微滞后",
+  obvious_delay: "明显滞后",
+  serious_delay: "严重滞后",
+};
+
+function ProgressDashboardView({
+  projects,
+  onNewProject,
+  onOpenInbox,
+}: {
+  projects: Project[];
+  onNewProject: () => void;
+  onOpenInbox: () => void;
+}) {
+  const [selectedProjectId, setSelectedProjectId] = useState<number | "">(projects[0]?.id ?? "");
+  const [overview, setOverview] = useState<ProgressOverview | null>(null);
+  const [delayAnalysis, setDelayAnalysis] = useState<ProgressDelayAnalysis | null>(null);
+  const [dataQuality, setDataQuality] = useState<ProgressDataQuality | null>(null);
+  const [loading, setLoading] = useState(false);
+  const [error, setError] = useState("");
+
+  useEffect(() => {
+    if (!selectedProjectId && projects[0]?.id) {
+      setSelectedProjectId(projects[0].id);
+    }
+  }, [projects, selectedProjectId]);
+
+  async function loadDashboard(projectId: number) {
+    setLoading(true);
+    setError("");
+    try {
+      const [overviewResult, delayResult, qualityResult] = await Promise.all([
+        fetchProgressOverview(projectId),
+        fetchProgressDelayAnalysis(projectId),
+        fetchProgressDataQuality(projectId),
+      ]);
+      setOverview(overviewResult);
+      setDelayAnalysis(delayResult);
+      setDataQuality(qualityResult);
+    } catch (loadError) {
+      setError(loadError instanceof Error ? loadError.message : "进度看板加载失败");
+      setOverview(null);
+      setDelayAnalysis(null);
+      setDataQuality(null);
+    } finally {
+      setLoading(false);
+    }
+  }
+
+  useEffect(() => {
+    if (selectedProjectId) {
+      void loadDashboard(Number(selectedProjectId));
+    }
+  }, [selectedProjectId]);
+
+  const noProjects = projects.length === 0;
+  const hasNoProgressData = !loading && overview && !overview.latest_batch && overview.building_summary.length === 0;
+
+  return (
+    <div className="page-stack">
+      <PageHeader
+        eyebrow="阶段 4"
+        title="进度看板"
+        description="基于已发布 progress_record 展示总体进度、楼栋/专业统计、滞后任务和数据质量提醒。"
+        action={
+          noProjects ? (
+            <button className="primary-button" type="button" onClick={onNewProject}>
+              <Plus size={18} />
+              新建项目
+            </button>
+          ) : (
+            <label className="field compact-field dashboard-project-select" htmlFor="dashboard-project">
+              <span>当前项目</span>
+              <select
+                id="dashboard-project"
+                value={selectedProjectId}
+                onChange={(event) => setSelectedProjectId(Number(event.target.value))}
+              >
+                {projects.map((project) => (
+                  <option key={project.id} value={project.id}>
+                    {project.name}
+                  </option>
+                ))}
+              </select>
+            </label>
+          )
+        }
+      />
+
+      {noProjects && (
+        <section className="panel">
+          <EmptyState title="暂无项目" text="先新建项目，再通过智能投递箱发布进度数据。" />
+        </section>
+      )}
+      {error && <div className="error-banner">{error}</div>}
+      {loading && <section className="panel"><EmptyLine text="正在加载进度看板..." /></section>}
+
+      {!noProjects && overview && (
+        <>
+          {hasNoProgressData && (
+            <section className="panel">
+              <EmptyState title="暂无已发布进度" text="上传并发布进度 Excel 后，这里会显示项目进度看板。" />
+              <div className="form-actions">
+                <button className="primary-button" type="button" onClick={onOpenInbox}>
+                  <UploadCloud size={18} />
+                  投递进度表
+                </button>
+              </div>
+            </section>
+          )}
+
+          {overview.no_calculable_progress && (
+            <div className="warning-banner">当前数据缺少实际完成率，无法计算项目进度。</div>
+          )}
+          {!overview.no_calculable_progress && overview.overall_planned_percent === null && (
+            <div className="warning-banner">当前导入数据缺少计划进度，无法判断进度滞后，仅展示实际完成情况。</div>
+          )}
+
+          <section className="dashboard-metrics">
+            <MetricCard title="项目总体完成率" value={formatPercent(overview.overall_actual_percent)} hint="优先采用实际完成率" tone="blue" />
+            <MetricCard title="计划完成率" value={formatPercent(overview.overall_planned_percent)} hint="缺失时不判断滞后" tone="cyan" />
+            <MetricCard title="实际完成率" value={formatPercent(overview.overall_actual_percent)} hint={overview.latest_data_date ?? "暂无日期"} tone="green" />
+            <MetricCard
+              title="偏差"
+              value={formatSignedPercent(overview.deviation)}
+              hint={overview.delay_level ? delayLevelLabels[overview.delay_level] : "无法判断"}
+              tone={overview.delay_level === "serious_delay" || overview.delay_level === "obvious_delay" ? "risk" : "violet"}
+            />
+          </section>
+
+          <section className="dashboard-grid">
+            <section className="panel">
+              <div className="list-toolbar">
+                <span>各楼栋完成率</span>
+                <span className="muted-note">{overview.building_summary.length} 个楼栋</span>
+              </div>
+              <SummaryList items={overview.building_summary} />
+            </section>
+
+            <section className="panel">
+              <div className="list-toolbar">
+                <span>各专业完成率</span>
+                <span className="muted-note">{overview.discipline_summary.length} 个专业</span>
+              </div>
+              <SummaryList items={overview.discipline_summary} />
+            </section>
+          </section>
+
+          <section className="dashboard-grid">
+            <section className="panel">
+              <div className="list-toolbar">
+                <span>滞后任务</span>
+                <span className="muted-note">
+                  {delayAnalysis?.delay_count ?? 0} 项滞后 · {delayAnalysis?.serious_delay_count ?? 0} 项严重
+                </span>
+              </div>
+              <DelayedTaskTable tasks={delayAnalysis?.delayed_tasks ?? []} />
+            </section>
+
+            <section className="panel">
+              <div className="list-toolbar">
+                <span>数据质量提醒</span>
+                <span className="muted-note">
+                  {dataQuality?.warning_count ?? 0} warnings · {dataQuality?.error_count ?? 0} errors
+                </span>
+              </div>
+              <QualityList items={[...(dataQuality?.error_items ?? []), ...(dataQuality?.warning_items ?? [])]} />
+            </section>
+          </section>
+
+          <section className="panel import-summary">
+            <Info label="最新数据日期" value={overview.latest_data_date} />
+            <Info label="滞后等级" value={overview.delay_level ? delayLevelLabels[overview.delay_level] : "无法判断"} />
+            <Info label="最近导入批次" value={overview.latest_batch ? `#${overview.latest_batch.id} ${overview.latest_batch.file_name}` : "暂无"} />
+          </section>
+        </>
+      )}
+    </div>
+  );
+}
+
+function MetricCard({ title, value, hint, tone }: { title: string; value: string; hint: string; tone: string }) {
+  return (
+    <article className={`metric-card ${tone}`}>
+      <span>{title}</span>
+      <strong>{value}</strong>
+      <small>{hint}</small>
+    </article>
+  );
+}
+
+function SummaryList({ items }: { items: ProgressSummaryItem[] }) {
+  if (items.length === 0) {
+    return <EmptyLine text="暂无可统计数据。" />;
+  }
+
+  return (
+    <div className="summary-list">
+      {items.map((item) => (
+        <article className={`summary-row ${delayTone(item.delay_level)}`} key={item.label}>
+          <div>
+            <strong>{item.label}</strong>
+            <span>{item.record_count} 条记录 · 计划 {formatPercent(item.planned_percent)}</span>
+          </div>
+          <div className="summary-progress">
+            <div className="summary-bar">
+              <span style={{ width: `${barWidth(item.actual_percent)}%` }} />
+            </div>
+            <strong>{formatPercent(item.actual_percent)}</strong>
+          </div>
+        </article>
+      ))}
+    </div>
+  );
+}
+
+function DelayedTaskTable({ tasks }: { tasks: ProgressDelayedTask[] }) {
+  if (tasks.length === 0) {
+    return <EmptyLine text="暂无可判定滞后的任务。" />;
+  }
+
+  return (
+    <div className="preview-table-wrap compact-table-wrap">
+      <table className="preview-table dashboard-table">
+        <thead>
+          <tr>
+            <th>任务</th>
+            <th>楼栋</th>
+            <th>专业</th>
+            <th>计划</th>
+            <th>实际</th>
+            <th>偏差</th>
+            <th>等级</th>
+          </tr>
+        </thead>
+        <tbody>
+          {tasks.map((task) => (
+            <tr className={delayTone(task.delay_level)} key={task.id}>
+              <td>{task.task_name ?? "未命名任务"}</td>
+              <td>{task.building ?? "未填写"}</td>
+              <td>{task.discipline ?? "未填写"}</td>
+              <td>{formatPercent(task.planned_percent)}</td>
+              <td>{formatPercent(task.actual_percent)}</td>
+              <td>{formatSignedPercent(task.deviation)}</td>
+              <td>{task.delay_level ? delayLevelLabels[task.delay_level] : "无法判断"}</td>
+            </tr>
+          ))}
+        </tbody>
+      </table>
+    </div>
+  );
+}
+
+function QualityList({ items }: { items: ProgressDataQuality["warning_items"] }) {
+  if (items.length === 0) {
+    return <EmptyLine text="当前暂无数据质量提醒。" />;
+  }
+
+  return (
+    <div className="issue-list">
+      {items.slice(0, 8).map((item, index) => (
+        <div className={`issue-item ${item.severity}`} key={`${item.record_id}-${item.field}-${index}`}>
+          <strong>{item.severity.toUpperCase()}</strong>
+          <span>
+            {item.task_name || "未命名任务"} · {item.field} · {item.message}
+          </span>
+        </div>
+      ))}
+    </div>
+  );
+}
 
 function SmartInboxView({
   projects,
@@ -549,12 +908,25 @@ function SmartInboxView({
   );
 }
 
-function StatusCard({ icon, title, value, tone }: { icon: ReactNode; title: string; value: string; tone: string }) {
+function StatusCard({
+  icon,
+  title,
+  value,
+  tone,
+  note,
+}: {
+  icon: ReactNode;
+  title: string;
+  value: string;
+  tone: string;
+  note?: string;
+}) {
   return (
     <article className={`status-card ${tone}`}>
       <div className="status-icon">{icon}</div>
       <span>{title}</span>
       <strong>{value}</strong>
+      {note && <small>{note}</small>}
     </article>
   );
 }
@@ -587,6 +959,41 @@ function formatFileSize(bytes: number): string {
     return `${(bytes / 1024).toFixed(1)} KB`;
   }
   return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
+}
+
+function formatPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "--";
+  }
+  return `${Number(value).toFixed(1).replace(/\.0$/, "")}%`;
+}
+
+function formatSignedPercent(value: number | null | undefined): string {
+  if (value === null || value === undefined) {
+    return "--";
+  }
+  const prefix = value > 0 ? "+" : "";
+  return `${prefix}${Number(value).toFixed(1).replace(/\.0$/, "")}%`;
+}
+
+function barWidth(value: number | null | undefined): number {
+  if (value === null || value === undefined || Number.isNaN(value)) {
+    return 0;
+  }
+  return Math.max(0, Math.min(100, value));
+}
+
+function delayTone(level: string | null | undefined): string {
+  if (level === "serious_delay") {
+    return "delay-serious";
+  }
+  if (level === "obvious_delay") {
+    return "delay-obvious";
+  }
+  if (level === "slight_delay") {
+    return "delay-slight";
+  }
+  return "delay-normal";
 }
 
 function isExcelInboxItem(item: SmartInboxItem): boolean {

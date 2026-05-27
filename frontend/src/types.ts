@@ -133,3 +133,87 @@ export interface ProgressImportPublishResult {
   published_records: number;
   replaced_existing: boolean;
 }
+
+export interface ProgressSummaryItem {
+  label: string;
+  actual_percent: number | null;
+  planned_percent: number | null;
+  deviation: number | null;
+  delay_level: string | null;
+  record_count: number;
+}
+
+export interface LatestProgressBatch {
+  id: number;
+  project_id: number;
+  data_date: string;
+  file_name: string;
+  sheet_name: string;
+  status: string;
+  created_at: string;
+  published_at: string | null;
+}
+
+export interface ProgressDataQualityItem {
+  severity: "warning" | "error" | string;
+  record_id: number;
+  batch_id: number;
+  data_date: string | null;
+  field: string;
+  message: string;
+  building: string | null;
+  floor: string | null;
+  discipline: string | null;
+  task_name: string | null;
+}
+
+export interface ProgressOverview {
+  project_id: number;
+  latest_data_date: string | null;
+  overall_actual_percent: number | null;
+  overall_planned_percent: number | null;
+  deviation: number | null;
+  delay_level: string | null;
+  no_calculable_progress: boolean;
+  data_quality_warnings: ProgressDataQualityItem[];
+  building_summary: ProgressSummaryItem[];
+  discipline_summary: ProgressSummaryItem[];
+  latest_batch: LatestProgressBatch | null;
+}
+
+export interface ProgressDelayedTask {
+  id: number;
+  batch_id: number;
+  data_date: string | null;
+  building: string | null;
+  floor: string | null;
+  area: string | null;
+  discipline: string | null;
+  task_name: string | null;
+  planned_percent: number | null;
+  actual_percent: number | null;
+  deviation: number;
+  delay_level: string | null;
+  remark: string | null;
+}
+
+export interface ProgressDelayGroup {
+  label: string;
+  delay_count: number;
+  serious_delay_count: number;
+}
+
+export interface ProgressDelayAnalysis {
+  delayed_tasks: ProgressDelayedTask[];
+  delay_count: number;
+  serious_delay_count: number;
+  by_building: ProgressDelayGroup[];
+  by_discipline: ProgressDelayGroup[];
+}
+
+export interface ProgressDataQuality {
+  warning_count: number;
+  error_count: number;
+  warning_items: ProgressDataQualityItem[];
+  error_items: ProgressDataQualityItem[];
+}
