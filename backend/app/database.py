@@ -349,7 +349,8 @@ def connect_database(database_path: Path) -> sqlite3.Connection:
 
 def initialize_database(settings: Settings) -> None:
     ensure_data_directories(settings)
-    with connect_database(settings.database_path) as connection:
+    connection = connect_database(settings.database_path)
+    try:
         connection.execute(PROJECT_TABLE_SQL)
         connection.execute(FILE_ASSET_TABLE_SQL)
         connection.execute(SMART_INBOX_TABLE_SQL)
@@ -368,6 +369,8 @@ def initialize_database(settings: Settings) -> None:
         connection.execute("UPDATE diary_material SET source_type = 'progress' WHERE source_type = 'progress_import'")
         connection.execute("UPDATE diary_material SET source_type = 'manual' WHERE source_type = 'quick_record'")
         connection.commit()
+    finally:
+        connection.close()
 
 
 def get_connection(settings: Settings) -> Iterator[sqlite3.Connection]:

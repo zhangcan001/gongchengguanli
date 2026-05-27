@@ -97,6 +97,27 @@ function startBackend() {
   });
 }
 
+function isPortInUse(timeoutMs = 700) {
+  return new Promise((resolve) => {
+    let settled = false;
+    const done = (value) => {
+      if (!settled) {
+        settled = true;
+        resolve(value);
+      }
+    };
+    const socket = net.createConnection({ host: HOST, port: PORT, timeout: timeoutMs }, () => {
+      socket.end();
+      done(true);
+    });
+    socket.on("error", () => done(false));
+    socket.on("timeout", () => {
+      socket.destroy();
+      done(false);
+    });
+  });
+}
+
 function waitForHealth(timeoutMs = 30000) {
   const deadline = Date.now() + timeoutMs;
   return new Promise((resolve, reject) => {
@@ -313,6 +334,13 @@ app.whenReady().then(async () => {
   ensureDataDirectories(dataDir);
   logLine("[desktop] starting");
   createWindow();
+  if (await isPortInUse()) {
+    backendError = `本地服务端口 ${PORT} 已被占用，请关闭其他智能工程监理工作台窗口，或设置 SMART_SUPERVISION_PORT 后重新启动。`;
+    logLine(`[desktop:port-in-use] ${backendError}`);
+    showStartupError(backendError);
+    dialog.showErrorBox(APP_TITLE, backendError);
+    return;
+  }
   startBackend();
   try {
     await waitForHealth();
