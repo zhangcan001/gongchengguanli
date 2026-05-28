@@ -250,6 +250,122 @@ export interface ProgressDataQuality {
   error_items: ProgressDataQualityItem[];
 }
 
+export interface DashboardScope {
+  project_id: number;
+  view_mode: string;
+  scope_label: string;
+  message: string | null;
+  filters: Record<string, unknown>;
+  options: {
+    data_dates: string[];
+    batches: Array<{ batch_id: number; data_date: string | null; file_name: string; sheet_name: string }>;
+    buildings: string[];
+    floors: string[];
+    disciplines: string[];
+  };
+}
+
+export interface DashboardOverview {
+  project_id: number;
+  data_date: string | null;
+  item_count: number;
+  task_count: number;
+  actual_percent: number | null;
+  planned_percent: number | null;
+  progress_deviation: number | null;
+  delay_level: string;
+  delay_level_label: string;
+  weight_total: number | null;
+  weight_count: number;
+  calculation_method: string;
+  calculation_method_name: string;
+  no_calculable_progress: boolean;
+}
+
+export interface DashboardGroupCard {
+  name: string;
+  actual_percent: number | null;
+  planned_percent: number | null;
+  progress_deviation: number | null;
+  status: string;
+  status_label: string;
+  task_count: number;
+  delayed_count: number;
+  serious_delayed_count: number;
+  weight_total: number | null;
+}
+
+export interface FloorHeatmapItem {
+  building: string;
+  floor: string;
+  actual_percent: number | null;
+  planned_percent: number | null;
+  progress_deviation: number | null;
+  status: string;
+  status_label: string;
+  task_count: number;
+  delayed_count: number;
+  serious_delayed_count: number;
+  major_delayed_tasks: string[];
+}
+
+export interface DelayDistributionItem {
+  status: string;
+  status_label: string;
+  count: number;
+}
+
+export interface DashboardDelayedTask {
+  id: number;
+  batch_id: number;
+  data_date: string | null;
+  building: string | null;
+  floor: string | null;
+  area: string | null;
+  discipline: string | null;
+  task_name: string | null;
+  planned_percent: number | null;
+  actual_percent: number | null;
+  progress_deviation: number;
+  delay_level: string;
+  delay_level_label: string;
+  remark: string | null;
+}
+
+export interface CalculationContext {
+  calculation_method: string;
+  calculation_method_name: string;
+  recommendation_reason: string;
+  weight_total: number | null;
+  weight_source: string | null;
+  participating_task_count: number;
+  text: string;
+}
+
+export interface ProgressDashboardV2 {
+  scope: DashboardScope;
+  overview: DashboardOverview;
+  discipline_cards: DashboardGroupCard[];
+  building_cards: DashboardGroupCard[];
+  floor_heatmap: FloorHeatmapItem[];
+  delay_distribution: DelayDistributionItem[];
+  delayed_tasks: DashboardDelayedTask[];
+  data_quality: ProgressDataQuality;
+  calculation_context: CalculationContext;
+  dashboard_capabilities: Record<string, { available: boolean; reason: string }>;
+}
+
+export interface ProgressDashboardV2Filters {
+  project_id: number;
+  view_mode?: string;
+  data_date?: string;
+  batch_id?: number | "";
+  building?: string;
+  floor?: string;
+  discipline?: string;
+  calculation_method?: string;
+}
+
 export interface QuickRecordDetected {
   building: string;
   floor: string;
@@ -473,16 +589,42 @@ export interface DiaryDraft {
   tomorrow_plan: string;
 }
 
+export interface DiaryPersonalDraft {
+  constructionStatus: string;
+  contractorPersonnel: string;
+  machinery: string;
+  inspectionWork: string;
+  materialAcceptance: string;
+  acceptanceWork: string;
+  standingWork: string;
+  meeting: string;
+  internalWork: string;
+  issuesAndActions: string;
+  otherMatters: string;
+  specialistSupervisorComments: string;
+  chiefEngineerComments: string;
+}
+
 export interface DiaryGenerateInput {
   project_id: number;
   diary_date: string;
   weather?: string | null;
+  weather_morning?: string | null;
+  weather_afternoon?: string | null;
   temperature?: string | null;
+  humidity?: string | null;
+  wind_direction?: string | null;
+  wind_power?: string | null;
+  city?: string | null;
+  writer?: string | null;
+  mode?: "polish" | "analyze";
+  current_draft?: DiaryPersonalDraft | null;
   manual_note?: string | null;
 }
 
 export interface DiaryGenerateResult {
   draft: DiaryDraft;
+  personal_draft: DiaryPersonalDraft;
   ai_generation_id: number;
   used_ai: boolean;
   message: string | null;
@@ -492,26 +634,71 @@ export interface DiaryConfirmInput {
   project_id: number;
   diary_date: string;
   weather?: string | null;
+  weather_morning?: string | null;
+  weather_afternoon?: string | null;
   temperature?: string | null;
+  humidity?: string | null;
+  wind_direction?: string | null;
+  wind_power?: string | null;
+  city?: string | null;
+  writer?: string | null;
   ai_generation_id?: number | null;
-  draft: DiaryDraft;
+  draft?: DiaryDraft | null;
+  personal_draft?: DiaryPersonalDraft | null;
+}
+
+export interface DiaryWeatherInput {
+  city: string;
+  diary_date: string;
+}
+
+export interface DiaryWeatherResult {
+  city: string;
+  date: string;
+  weather_morning: string;
+  weather_afternoon: string;
+  temperature: string;
+  humidity: string;
+  wind_direction: string;
+  wind_power: string;
 }
 
 export interface Diary {
   id: number;
   project_id: number;
   diary_date: string;
+  weekday: string | null;
+  writer: string | null;
+  city: string | null;
   weather: string | null;
+  weather_morning: string | null;
+  weather_afternoon: string | null;
   temperature: string | null;
+  humidity: string | null;
+  wind_direction: string | null;
+  wind_power: string | null;
   construction_summary: string | null;
+  construction_status: string | null;
   workers_summary: string | null;
+  contractor_personnel: string | null;
   machinery_summary: string | null;
+  machinery: string | null;
   quality_summary: string | null;
   safety_summary: string | null;
   patrol_summary: string | null;
+  inspection_work: string | null;
+  material_acceptance: string | null;
+  acceptance_work: string | null;
+  standing_work: string | null;
+  meeting: string | null;
+  internal_work: string | null;
   issue_summary: string | null;
+  issues_and_actions: string | null;
   handling_opinion: string | null;
   tomorrow_plan: string | null;
+  other_matters: string | null;
+  specialist_supervisor_comments: string | null;
+  chief_engineer_comments: string | null;
   ai_generated: boolean;
   confirmed: boolean;
   created_at: string;

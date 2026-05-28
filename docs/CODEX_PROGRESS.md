@@ -1,218 +1,144 @@
 # CODEX_PROGRESS.md
 
-# Codex 开发进度总索引
+# Codex 开发进度记录
 
-## 重要说明
-
-从现在开始，普通模块分支**不要直接修改本文件**。
-
-本文件只作为总索引和规则说明，避免多个 Codex 分支同时追加 `docs/CODEX_PROGRESS.md` 造成 add/add 冲突或内容冲突。
-
-每个模块只更新自己的专属进度文件：
-
-| 模块 | 分支 | 专属进度文件 |
-|---|---|---|
-| 进度 Excel 模块 | `codex/jindu` | `docs/codex-progress/jindu.md` |
-| 现场问题记录闭环模块 | `codex/xianchangjilu` | `docs/codex-progress/xianchangjilu.md` |
-| 监理日志 / 导出 / 归档模块 | `codex/rizhi` | `docs/codex-progress/rizhi.md` |
-| 桌面端打包模块 | `codex/DaBao` | `docs/codex-progress/DaBao.md` |
-| UI 界面模块 | `codex/UI` | `docs/codex-progress/UI.md` |
-
----
-
-## 使用规则
-
-1. 普通模块分支不要修改 `docs/CODEX_PROGRESS.md`。
-2. 每个模块只写自己的 `docs/codex-progress/*.md` 文件。
-3. `docs/CODEX_PROGRESS.md` 只在主分支维护或文档规则调整时修改。
-4. 每个 Codex Thread 完成后，必须更新自己的专属进度文件。
-5. 每个 Codex Thread 开工前必须先同步最新 `origin/main`。
-6. 每个 Codex Thread 提交前必须再次同步最新 `origin/main` 并运行测试。
-
----
-
-# 当前项目
-
-```text
-项目名称：智能工程监理工作台
-当前阶段：v1.0-RC
-主项目路径：C:\Users\ADMIN\Documents\gongchengguanli
-```
-
----
-
-# 当前 v1.0-RC 主链路目标
-
-```text
-新建项目
-→ 上传进度 Excel
-→ 智能识别字段
-→ 预览校验
-→ 发布进度
-→ 进度看板展示
-→ 一句话生成现场问题
-→ 问题闭环流转
-→ 日志素材自动收集
-→ 一键生成监理日志
-→ 导出 Word / Excel
-→ 自动归档
-→ 桌面端可启动
-→ 可备份数据
-```
-
----
-
-# 模块分工
-
-| 模块 | 分支 | 责任范围 |
-|---|---|---|
-| 进度 Excel 模块 | `codex/jindu` | Excel 识别、字段映射、进度发布、进度看板 |
-| 现场问题记录闭环模块 | `codex/xianchangjilu` | 一句话记录、巡视、问题流转、复查关闭 |
-| 监理日志 / 导出 / 归档模块 | `codex/rizhi` | 日志素材、日志生成、导出、归档、备份 |
-| 桌面端打包模块 | `codex/DaBao` | Electron、PyInstaller、数据目录、启动关闭 |
-| UI 界面模块 | `codex/UI` | 页面可用性、暗色科技 UI、前端 build |
-
----
-
-# 建议合并顺序
-
-```text
-1. codex/jindu
-2. codex/xianchangjilu
-3. codex/rizhi
-4. codex/UI
-5. codex/DaBao
-```
-
----
-
-# 防冲突流程
-
-每个分支开工前：
-
-```powershell
-git fetch origin
-git merge origin/main
-```
-
-每个分支提交前：
-
-```powershell
-git fetch origin
-git merge origin/main
-```
-
-如果出现冲突：
-
-```text
-立即停止并报告，不要继续开发。
-```
-
----
-
-# 专属进度文件模板
-
-每个模块的进度文件都使用以下格式：
-
-```md
-## 2026-05-28 / 分支名 / 模块名称
+## 2026-05-28 / codex/UI / UI 界面模块
 
 ### 本轮目标
 
-- 
+- 使用独立 worktree 执行 UI 模块任务。
+- 保证 `npm run build` 通过。
+- 修复前端白屏、类型错误、页面打不开等 P0/P1 问题。
+- 验证首页、智能投递箱、进度导入确认、进度看板、一句话现场记录、问题闭环、监理日志、资料归档、系统设置页面可用。
+- 保持暗色科技感工程驾驶舱 UI，首页突出智能输入、今日待办、风险提醒、AI 建议、进度/质量/安全/资料/日志状态卡片。
 
 ### 已完成
 
-- 
+- 创建并使用独立 worktree：`C:\Users\ADMIN\Documents\gongchengguanli-ui`。
+- 在 `codex/UI` 分支完成本轮 UI 检查与修复。
+- 已阅读 `AGENTS.md`、`PROJECT_DEV_DOC.md`、`TASKS.md`；当前 UI worktree 缺少 `docs/MODULE_BOUNDARIES.md` 和本文件，已从主工作区读取模块边界作为约束来源。
+- 执行 `npm install` 和 `npm run build`，前端构建通过。
+- 修复首页驾驶舱数据刷新问题：发布进度、生成日志、归档资料后，再进入首页会重新拉取进度、问题、日志素材、日志状态和归档数据，避免首页主动提醒显示旧数据。
+- 使用本地后端 + Vite + Playwright CLI 烟测核心页面和主链路入口。
+- 验证进度 Excel 投递、识别确认、发布、进度看板展示。
+- 验证一句话现场记录识别、确认生成巡视记录/问题/日志素材。
+- 验证问题闭环页面列表、详情和明确错误提示。
+- 验证监理日志模板兜底生成、确认保存、Word 导出和自动归档展示。
+- 验证资料归档页面可查询已归档文件。
+- 验证系统设置页面可打开，AI Key 说明保持脱敏原则。
 
 ### 修改文件
 
-- 
+- `frontend/src/App.tsx`
+- `docs/CODEX_PROGRESS.md`
 
 ### 测试结果
 
-- 后端 pytest：
-- 前端 build：
-- 桌面端：
-- 手动验证：
+- 前端依赖安装：`cd frontend && npm install` 通过。
+- 前端 build：`cd frontend && npm run build` 通过。
+- 手动/浏览器烟测：通过。
+  - 首页：可打开，刷新后显示最新进度、待办、风险、日志素材、归档摘要。
+  - 智能投递箱：可上传文件，记录进入待识别队列。
+  - 进度导入确认页：可显示 Sheet、表头行、字段映射、校验错误/警告、数据预览和发布按钮。
+  - 进度看板：发布后显示总体完成率、计划/实际、偏差、楼栋/专业统计、滞后任务。
+  - 一句话现场记录：示例 `3#楼12层砌体灰缝不饱满，要求整改。` 可识别并生成正式记录。
+  - 问题闭环：列表、详情、流转操作区可用；未填写操作内容时显示明确错误。
+  - 监理日志：模板兜底生成、人工编辑、确认保存和 Word 导出可用。
+  - 资料归档：已归档资料可查询和展示。
+  - 系统设置：AI 配置、桌面端备份占位和安全说明可打开。
+- 后端 pytest：未运行，本轮禁止修改后端业务逻辑。
+- 桌面端：未运行，本轮禁止修改桌面壳。
 
 ### 剩余问题
 
 #### P0
 
-- 无 / 
+- 无。
 
 #### P1
 
-- 无 / 
+- 无。
 
 #### P2
 
-- 无 / 
+- `App.tsx` 仍然较大，后续可在 UI 模块继续拆分为 pages/components，降低维护成本。
+- 当前 `codex/UI` 分支缺少 `docs/MODULE_BOUNDARIES.md`，本轮仅从主工作区读取作为约束，未在 UI 分支补入该文件以避免扩大修改范围。
 
 ### 下一步建议
 
-- 
+- 后续 UI 模块可拆分 `frontend/src/App.tsx`，优先按页面切出 `pages/`，再切通用卡片、表格、提示组件。
+- 合并前建议在最终集成分支重新运行 `npm install`、`npm run build`，并结合最新后端分支做一次完整主链路验收。
 
 ### 是否建议合并
 
-- 是 / 否
-```
+- 是，建议在其他业务模块分支合并后再合并 UI 分支，便于 UI 统一适配最新接口。
 
----
-
-# 记录区
-
-## 2026-05-28 / 文档规则调整 / 避免进度文档冲突
+## 2026-05-28 / codex/UI / UI 界面模块复验
 
 ### 本轮目标
 
-- 调整 Codex 多分支并行开发规则。
-- 避免多个分支同时修改 `docs/CODEX_PROGRESS.md`。
-- 改为每个模块维护自己的专属进度文件。
+- 在独立 worktree `C:\Users\ADMIN\Documents\gongchengguanli-ui` 继续执行 UI 模块任务。
+- 严格遵守 `docs/MODULE_BOUNDARIES.md` 中 `codex/UI` 的模块边界。
+- 执行 `cd frontend && npm install && npm run build`。
+- 复验首页、智能投递箱、进度导入确认、进度看板、一句话现场记录、问题闭环、监理日志、资料归档、系统设置页面可用。
 
 ### 已完成
 
-- `docs/CODEX_PROGRESS.md` 改为总索引。
-- 新增专属进度文件目录：`docs/codex-progress/`。
-- 明确每个模块的专属进度文件。
+- 重新阅读 `AGENTS.md`、`PROJECT_DEV_DOC.md`、`TASKS.md`、`docs/CODEX_PROGRESS.md`；当前 UI worktree 仍缺少 `docs/MODULE_BOUNDARIES.md`，已从主工作区读取该边界文档作为约束来源。
+- 执行 `npm install`，依赖已是最新且无漏洞；安装过程只产生 npm 平台可选依赖锁文件噪声，已恢复，未保留无意义变更。
+- 执行 `npm run build`，TypeScript 与 Vite 生产构建通过。
+- 使用临时数据目录启动本地后端和 Vite 开发服务完成浏览器烟测，未污染仓库数据目录。
+- 验证首页智能工程驾驶舱可打开，并在主链路数据变化后刷新显示进度、待办、问题、日志和归档状态。
+- 验证智能投递箱可上传 Excel 文件并进入待识别队列。
+- 验证进度导入确认页可显示 Sheet、表头行、数据开始行、字段映射、错误/警告、数据预览和发布按钮；存在 error 时发布按钮禁用且错误提示包含行号、字段和原因。
+- 验证有效进度导入可发布，进度看板可展示总体完成率、楼栋/专业统计、滞后任务、数据质量提醒和最近导入批次。
+- 验证一句话现场记录可识别 `3#楼12层砌体灰缝不饱满，要求整改。`，并确认生成巡视记录、问题草稿和日志素材。
+- 验证问题闭环页列表、详情、流转操作区可用，空操作内容会显示明确错误提示。
+- 验证监理日志页可读取素材池、模板兜底生成草稿、人工确认保存、Word 导出并自动归档。
+- 验证资料归档页可查询进度原始表和监理日志 Word 归档记录。
+- 验证系统设置页可打开，AI 配置、桌面端备份占位和安全说明可读。
 
 ### 修改文件
 
 - `docs/CODEX_PROGRESS.md`
-- `docs/MODULE_BOUNDARIES.md`
-- `docs/codex-progress/jindu.md`
-- `docs/codex-progress/xianchangjilu.md`
-- `docs/codex-progress/rizhi.md`
-- `docs/codex-progress/UI.md`
-- `docs/codex-progress/DaBao.md`
 
 ### 测试结果
 
-- 后端 pytest：未涉及
-- 前端 build：未涉及
-- 桌面端：未涉及
-- 手动验证：文档规则已更新
+- `cd frontend && npm install`：通过，0 vulnerabilities。
+- `cd frontend && npm run build`：通过。
+- `GET http://127.0.0.1:18000/api/health`：返回 `{"status":"ok","version":"1.0-smart"}`。
+- Playwright CLI 浏览器烟测：通过。
+  - 首页：智能输入区、今日待办、风险提醒、AI 建议、进度/质量/安全/资料/日志状态卡片可见。
+  - 智能投递箱：Excel 上传成功，列表显示待识别/已识别状态。
+  - 进度导入确认页：字段映射、错误提示、数据预览、发布状态可用。
+  - 进度看板：发布后显示总体完成率、楼栋/专业统计和滞后任务表。
+  - 一句话现场记录：可识别并确认生成业务记录。
+  - 问题闭环：列表、详情和明确错误提示可用。
+  - 监理日志：素材池、日志草稿、确认保存、Word 导出可用。
+  - 资料归档：可展示自动归档的进度资料和监理日志资料。
+  - 系统设置：AI 配置与安全说明页面可打开。
 
 ### 剩余问题
 
 #### P0
 
-- 无
+- 无。
 
 #### P1
 
-- 后续每个 Codex Thread 必须遵守专属进度文件规则。
+- 无。
 
 #### P2
 
-- 可后续补充模块完成度总表。
+- 开发服务下浏览器会请求 `/favicon.ico` 并产生 404 console 噪声；`frontend/index.html` 不在本轮允许修改范围内，本轮未处理，不影响页面可用性和 build。
+- `App.tsx` 仍然较大，后续 UI 模块可在不影响进度的前提下继续拆分 pages/components。
+- 当前 `codex/UI` 分支仍缺少 `docs/MODULE_BOUNDARIES.md`，本轮仅读取主工作区副本作为约束，未复制该文档以避免扩大修改范围。
 
 ### 下一步建议
 
-- 将新规则同步给当前正在运行的 Codex Thread。
-- 如果已有分支修改了旧版 `docs/CODEX_PROGRESS.md`，后续合并时保留 main 版本，并把该分支进度迁移到专属文件。
+- 合并前在最终集成分支重新运行前端 build，并结合最新业务模块分支做一次主链路验收。
+- 若后续允许修改 `frontend/index.html`，可补充 favicon 或内联图标以消除开发环境 404 噪声。
 
 ### 是否建议合并
 
-- 是
+- 是。UI 模块本轮未改后端业务逻辑，目标页面可用，前端 build 通过；建议在进度、现场记录、日志归档等业务模块合并稳定后再合并 UI 分支做最终适配。

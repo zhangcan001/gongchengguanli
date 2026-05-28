@@ -1,9 +1,11 @@
 import re
 import sqlite3
+import zipfile
 from datetime import date
 from pathlib import Path
 from typing import Any
 from uuid import uuid4
+from xml.sax.saxutils import escape as escape_xml
 
 from docx import Document
 from docx.document import Document as DocumentObject
@@ -14,10 +16,11 @@ from openpyxl.styles import Alignment, Font, PatternFill
 from openpyxl.utils import get_column_letter
 
 from .archive_service import ArchiveService
-from .config import Settings
+from .config import PROJECT_ROOT, Settings
 from .errors import ErrorCode
 from .issues import IssueService
 from .progress_analytics import ProgressAnalyticsService
+from .progress_dashboard_v2 import ProgressDashboardV2Service
 from .repositories import RepositoryError
 
 
@@ -49,6 +52,8 @@ DIARY_FIELDS = (
     ("handling_opinion", "处理意见"),
     ("tomorrow_plan", "明日重点"),
 )
+
+DIARY_TEMPLATE_PATH = PROJECT_ROOT / "resources" / "templates" / "个人监理日记模板.docx"
 
 ISSUE_TYPE_LABELS = {
     "quality": "质量问题",
@@ -151,6 +156,51 @@ def _label(mapping: dict[str, str], value: Any) -> str:
     return mapping.get(str(value or ""), _blank(value))
 
 
+def _word_runs(value: Any, fallback: str = "无。") -> str:
+    content = fallback if value is None or str(value) == "" else str(value)
+    runs = []
+    for index, line in enumerate(content.splitlines() or [content]):
+        text = f'<w:r><w:t xml:space="preserve">{escape_xml(line)}</w:t></w:r>'
+        runs.append(text if index == 0 else f"<w:r><w:br/></w:r>{text}")
+    return "".join(runs)
+
+
+def _replace_cell_content(cell_xml: str, value: Any, fallback: str = "无。") -> str:
+    pattern = re.compile(r"(<w:p[\s\S]*?>)([\s\S]*?)(</w:p>)")
+    if pattern.search(cell_xml):
+        return pattern.sub(lambda match: f"{match.group(1)}{_word_runs(value, fallback)}{match.group(3)}", cell_xml, count=1)
+    return cell_xml.replace("</w:tc>", f"<w:p>{_word_runs(value, fallback)}</w:p></w:tc>")
+
+
+def _replace_table_cell(document_xml: str, row_index: int, cell_index: int, value: Any, fallback: str = "无。") -> str:
+    current_row = -1
+
+    def replace_row(row_match: re.Match[str]) -> str:
+        nonlocal current_row
+        current_row += 1
+        row_xml = row_match.group(0)
+        if current_row != row_index:
+            return row_xml
+        current_cell = -1
+
+        def replace_cell(cell_match: re.Match[str]) -> str:
+            nonlocal current_cell
+            current_cell += 1
+            cell_xml = cell_match.group(0)
+            if current_cell != cell_index:
+                return cell_xml
+            return _replace_cell_content(cell_xml, value, fallback)
+
+        return re.sub(r"<w:tc[\s\S]*?</w:tc>", replace_cell, row_xml)
+
+    return re.sub(r"<w:tr[\s\S]*?</w:tr>", replace_row, document_xml)
+
+
+def _replace_exact_text(document_xml: str, old_text: str, new_text: str) -> str:
+    pattern = re.compile(rf"(<w:t[^>]*>){re.escape(old_text)}(</w:t>)")
+    return pattern.sub(lambda match: f"{match.group(1)}{escape_xml(new_text)}{match.group(2)}", document_xml)
+
+
 class ExportService:
     def __init__(self, connection: sqlite3.Connection, settings: Settings) -> None:
         self.connection = connection
@@ -158,6 +208,24 @@ class ExportService:
 
     def export_diary_word(self, diary_id: int) -> dict[str, Any]:
         diary = self._get_diary(diary_id)
+        if DIARY_TEMPLATE_PATH.is_file():
+            original_name = _build_original_name(
+                day=diary["diary_date"],
+                location="项目",
+                topic="监理日志",
+                doc_type="监理日志",
+                suffix="docx",
+            )
+            target_path = self._export_path(original_name)
+            self._render_diary_template(diary, target_path)
+            return self._insert_file_asset(
+                project_id=diary["project_id"],
+                business_type="diary_export",
+                business_id=diary_id,
+                target_path=target_path,
+                original_file_name=original_name,
+            )
+
         document = self._new_document("监理日志")
         self._add_meta(document, diary["project_name"], f"日志日期：{diary['diary_date']}")
         self._add_key_value_table(
@@ -187,6 +255,57 @@ class ExportService:
             business_id=diary_id,
             original_file_name=original_name,
         )
+
+    def _render_diary_template(self, diary: dict[str, Any], target_path: Path) -> None:
+        date_value = str(diary.get("diary_date") or "")
+        try:
+            parsed_date = date.fromisoformat(date_value)
+            date_text = f"{parsed_date.year}年{parsed_date.month:02d}月{parsed_date.day:02d}日"
+        except ValueError:
+            date_text = date_value
+
+        with zipfile.ZipFile(DIARY_TEMPLATE_PATH, "r") as source:
+            entries = {name: source.read(name) for name in source.namelist()}
+
+        document_xml = entries["word/document.xml"].decode("utf-8")
+        document_xml = _replace_exact_text(document_xml, "监理日记", "监理日志")
+        document_xml = _replace_table_cell(document_xml, 0, 2, date_text, "")
+        document_xml = _replace_table_cell(document_xml, 0, 3, diary.get("weekday") or "", "")
+        document_xml = _replace_table_cell(document_xml, 2, 0, f"上午 {diary.get('weather_morning') or diary.get('weather') or ''}", "")
+        document_xml = _replace_table_cell(document_xml, 2, 1, f"下午 {diary.get('weather_afternoon') or diary.get('weather') or ''}", "")
+        document_xml = _replace_table_cell(document_xml, 2, 3, diary.get("temperature") or "", "")
+        document_xml = _replace_table_cell(document_xml, 2, 4, diary.get("humidity") or "", "")
+        document_xml = _replace_table_cell(document_xml, 2, 5, diary.get("wind_direction") or "", "")
+        document_xml = _replace_table_cell(document_xml, 2, 6, diary.get("wind_power") or "", "")
+        document_xml = _replace_table_cell(document_xml, 4, 1, diary.get("construction_status") or diary.get("construction_summary"))
+        document_xml = _replace_table_cell(document_xml, 5, 1, diary.get("contractor_personnel") or diary.get("workers_summary"))
+        document_xml = _replace_table_cell(document_xml, 6, 1, diary.get("machinery") or diary.get("machinery_summary"))
+        document_xml = _replace_table_cell(document_xml, 8, 1, diary.get("inspection_work") or diary.get("patrol_summary"))
+        document_xml = _replace_table_cell(document_xml, 9, 1, diary.get("material_acceptance"), "")
+        document_xml = _replace_table_cell(document_xml, 10, 1, diary.get("acceptance_work"), "")
+        document_xml = _replace_table_cell(document_xml, 11, 1, diary.get("standing_work"), "")
+        document_xml = _replace_table_cell(document_xml, 12, 1, diary.get("meeting"), "")
+        document_xml = _replace_table_cell(document_xml, 13, 1, diary.get("internal_work"), "")
+        document_xml = _replace_table_cell(document_xml, 15, 0, diary.get("issues_and_actions") or diary.get("issue_summary"))
+        document_xml = _replace_table_cell(document_xml, 17, 0, diary.get("other_matters") or diary.get("tomorrow_plan"), "")
+        document_xml = _replace_table_cell(document_xml, 21, 0, diary.get("chief_engineer_comments"), "")
+        document_xml = _replace_exact_text(document_xml, "日记填写人：张灿", f"日记填写人：{diary.get('writer') or '张灿'}")
+        entries["word/document.xml"] = document_xml.encode("utf-8")
+
+        with zipfile.ZipFile(target_path, "w", compression=zipfile.ZIP_DEFLATED) as target:
+            for name, content in entries.items():
+                target.writestr(name, content)
+        document = Document(target_path)
+        changed = False
+        for paragraph in document.paragraphs:
+            if "监理日记" in paragraph.text:
+                paragraph.text = paragraph.text.replace("监理日记", "监理日志")
+                changed = True
+        document.add_paragraph("今日施工情况")
+        document.add_paragraph(_blank(diary.get("construction_status") or diary.get("construction_summary"), "暂无记录。"))
+        changed = True
+        if changed:
+            document.save(target_path)
 
     def export_patrol_word(self, patrol_id: int) -> dict[str, Any]:
         patrol = self._get_patrol(patrol_id)
@@ -374,6 +493,7 @@ class ExportService:
     def export_progress_analysis_excel(self, project_id: int) -> dict[str, Any]:
         _ensure_project_exists(self.connection, project_id)
         project = self._get_project(project_id)
+        dashboard = ProgressDashboardV2Service(self.connection).get_dashboard(project_id=project_id)
         analytics = ProgressAnalyticsService(self.connection)
         overview = analytics.get_overview(project_id)
         delay = analytics.get_delay_analysis(project_id)
@@ -382,48 +502,79 @@ class ExportService:
         workbook = Workbook()
         overview_sheet = workbook.active
         overview_sheet.title = "进度概览"
+        dashboard_overview = dashboard["overview"]
+        context = dashboard["calculation_context"]
         self._write_sheet_table(
             overview_sheet,
             [
                 ["指标", "值"],
                 ["项目名称", project["name"]],
-                ["最新数据日期", overview["latest_data_date"] or ""],
-                ["总体实际完成率", overview["overall_actual_percent"] if overview["overall_actual_percent"] is not None else ""],
-                ["总体计划完成率", overview["overall_planned_percent"] if overview["overall_planned_percent"] is not None else ""],
-                ["偏差", overview["deviation"] if overview["deviation"] is not None else ""],
-                ["滞后等级", _label(DELAY_LEVEL_LABELS, overview["delay_level"]) if overview["delay_level"] else "无法判断"],
-                ["无可计算进度", "是" if overview["no_calculable_progress"] else "否"],
+                ["当前范围", dashboard["scope"]["scope_label"]],
+                ["最新数据日期", dashboard_overview["data_date"] or overview["latest_data_date"] or ""],
+                ["统计口径", context["calculation_method_name"]],
+                ["口径说明", context["recommendation_reason"]],
+                ["总体实际完成率", dashboard_overview["actual_percent"] if dashboard_overview["actual_percent"] is not None else ""],
+                ["总体计划完成率", dashboard_overview["planned_percent"] if dashboard_overview["planned_percent"] is not None else ""],
+                ["偏差", dashboard_overview["progress_deviation"] if dashboard_overview["progress_deviation"] is not None else ""],
+                ["滞后等级", dashboard_overview["delay_level_label"]],
+                ["权重合计", context["weight_total"] if context["weight_total"] is not None else ""],
+                ["参与统计任务数", context["participating_task_count"]],
+                ["无可计算进度", "是" if dashboard_overview["no_calculable_progress"] else "否"],
                 ["最近导入批次", f"#{overview['latest_batch']['id']} {overview['latest_batch']['file_name']}" if overview["latest_batch"] else ""],
             ],
         )
         self._write_sheet_table(
             workbook.create_sheet("楼栋统计"),
-            [["楼栋", "实际完成率", "计划完成率", "偏差", "滞后等级", "记录数"]]
+            [["楼栋", "实际完成率", "计划完成率", "偏差", "状态", "任务数", "滞后数", "严重滞后数", "权重合计"]]
             + [
                 [
-                    item["label"],
+                    item["name"],
                     item["actual_percent"] if item["actual_percent"] is not None else "",
                     item["planned_percent"] if item["planned_percent"] is not None else "",
-                    item["deviation"] if item["deviation"] is not None else "",
-                    _label(DELAY_LEVEL_LABELS, item["delay_level"]) if item["delay_level"] else "",
-                    item["record_count"],
+                    item["progress_deviation"] if item["progress_deviation"] is not None else "",
+                    item["status_label"],
+                    item["task_count"],
+                    item["delayed_count"],
+                    item["serious_delayed_count"],
+                    item["weight_total"] if item["weight_total"] is not None else "",
                 ]
-                for item in overview["building_summary"]
+                for item in dashboard["building_cards"]
             ],
         )
         self._write_sheet_table(
             workbook.create_sheet("专业统计"),
-            [["专业", "实际完成率", "计划完成率", "偏差", "滞后等级", "记录数"]]
+            [["专业", "实际完成率", "计划完成率", "偏差", "状态", "任务数", "滞后数", "严重滞后数", "权重合计"]]
             + [
                 [
-                    item["label"],
+                    item["name"],
                     item["actual_percent"] if item["actual_percent"] is not None else "",
                     item["planned_percent"] if item["planned_percent"] is not None else "",
-                    item["deviation"] if item["deviation"] is not None else "",
-                    _label(DELAY_LEVEL_LABELS, item["delay_level"]) if item["delay_level"] else "",
-                    item["record_count"],
+                    item["progress_deviation"] if item["progress_deviation"] is not None else "",
+                    item["status_label"],
+                    item["task_count"],
+                    item["delayed_count"],
+                    item["serious_delayed_count"],
+                    item["weight_total"] if item["weight_total"] is not None else "",
                 ]
-                for item in overview["discipline_summary"]
+                for item in dashboard["discipline_cards"]
+            ],
+        )
+        self._write_sheet_table(
+            workbook.create_sheet("楼层热力"),
+            [["楼栋", "楼层", "实际完成率", "计划完成率", "偏差", "状态", "任务数", "滞后数", "主要滞后任务"]]
+            + [
+                [
+                    item["building"],
+                    item["floor"],
+                    item["actual_percent"] if item["actual_percent"] is not None else "",
+                    item["planned_percent"] if item["planned_percent"] is not None else "",
+                    item["progress_deviation"] if item["progress_deviation"] is not None else "",
+                    item["status_label"],
+                    item["task_count"],
+                    item["delayed_count"],
+                    "；".join(item["major_delayed_tasks"]),
+                ]
+                for item in dashboard["floor_heatmap"]
             ],
         )
         self._write_sheet_table(

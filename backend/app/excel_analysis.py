@@ -20,6 +20,7 @@ TARGET_FIELDS = (
     "total_quantity",
     "cumulative_quantity",
     "period_quantity",
+    "weight",
     "planned_percent",
     "actual_percent",
     "planned_start_date",
@@ -38,6 +39,7 @@ FIELD_ALIASES: dict[str, tuple[str, ...]] = {
     "total_quantity": ("总量", "工程量", "合同量", "总工程量"),
     "cumulative_quantity": ("累计完成", "累计完成量", "已完成量"),
     "period_quantity": ("本期完成", "本周完成", "今日完成", "本月完成"),
+    "weight": ("权重", "weight", "占比", "统计权重", "权重系数", "系数"),
     "planned_percent": ("计划完成率", "计划进度", "计划百分比"),
     "actual_percent": ("实际完成率", "实际进度", "完成率", "形象进度", "完成进度"),
     "planned_start_date": ("计划开始", "计划开始日期", "开始日期"),
@@ -162,24 +164,27 @@ def match_field(source_field: str) -> tuple[str, float]:
 class ExcelAnalysisService:
     def analyze(self, file_path: Path, *, fallback_date: date | None = None) -> ExcelAnalysisResult:
         workbook = load_workbook(file_path, data_only=True, read_only=True)
-        worksheet = self._select_sheet(workbook.worksheets)
-        header_row_index = self._detect_header_row(worksheet)
-        headers = self._read_headers(worksheet, header_row_index)
-        data_start_row_index = self._detect_data_start_row(worksheet, header_row_index)
-        mappings = self._build_mappings(headers)
-        data_date = self._detect_data_date(file_path.name, worksheet, headers, data_start_row_index, fallback_date)
-        preview_rows, warnings, errors = self._build_preview(worksheet, headers, mappings, data_start_row_index)
+        try:
+            worksheet = self._select_sheet(workbook.worksheets)
+            header_row_index = self._detect_header_row(worksheet)
+            headers = self._read_headers(worksheet, header_row_index)
+            data_start_row_index = self._detect_data_start_row(worksheet, header_row_index)
+            mappings = self._build_mappings(headers)
+            data_date = self._detect_data_date(file_path.name, worksheet, headers, data_start_row_index, fallback_date)
+            preview_rows, warnings, errors = self._build_preview(worksheet, headers, mappings, data_start_row_index)
 
-        return ExcelAnalysisResult(
-            sheet_name=worksheet.title,
-            header_row_index=header_row_index,
-            data_start_row_index=data_start_row_index,
-            data_date=data_date,
-            field_mappings=mappings,
-            preview_rows=preview_rows,
-            warnings=warnings,
-            errors=errors,
-        )
+            return ExcelAnalysisResult(
+                sheet_name=worksheet.title,
+                header_row_index=header_row_index,
+                data_start_row_index=data_start_row_index,
+                data_date=data_date,
+                field_mappings=mappings,
+                preview_rows=preview_rows,
+                warnings=warnings,
+                errors=errors,
+            )
+        finally:
+            workbook.close()
 
     def validate(
         self,
@@ -191,9 +196,12 @@ class ExcelAnalysisService:
         mappings: list[FieldMappingDraft],
     ) -> tuple[list[PreviewRowDraft], list[ValidationIssueDraft], list[ValidationIssueDraft]]:
         workbook = load_workbook(file_path, data_only=True, read_only=True)
-        worksheet = workbook[sheet_name]
-        headers = self._read_headers(worksheet, header_row_index)
-        return self._build_preview(worksheet, headers, mappings, data_start_row_index)
+        try:
+            worksheet = workbook[sheet_name]
+            headers = self._read_headers(worksheet, header_row_index)
+            return self._build_preview(worksheet, headers, mappings, data_start_row_index)
+        finally:
+            workbook.close()
 
     def _select_sheet(self, worksheets: list[Worksheet]) -> Worksheet:
         best_sheet = worksheets[0]
@@ -335,7 +343,7 @@ class ExcelAnalysisService:
             target_field = mapped_by_source.get(source_field)
             if not target_field:
                 continue
-            if target_field in {"total_quantity", "cumulative_quantity", "period_quantity"}:
+            if target_field in {"total_quantity", "cumulative_quantity", "period_quantity", "weight"}:
                 normalized[target_field] = parse_number(value)
             elif target_field in {"planned_percent", "actual_percent"}:
                 normalized[target_field] = parse_number(value, percent=True)

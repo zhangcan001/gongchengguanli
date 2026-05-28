@@ -118,6 +118,7 @@ CREATE TABLE IF NOT EXISTS progress_record (
     total_quantity REAL,
     cumulative_quantity REAL,
     period_quantity REAL,
+    weight REAL,
     planned_percent REAL,
     actual_percent REAL,
     planned_start_date TEXT,
@@ -216,17 +217,38 @@ CREATE TABLE IF NOT EXISTS diary (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     project_id INTEGER NOT NULL,
     diary_date TEXT NOT NULL,
+    weekday TEXT,
+    writer TEXT,
+    city TEXT,
     weather TEXT,
+    weather_morning TEXT,
+    weather_afternoon TEXT,
     temperature TEXT,
+    humidity TEXT,
+    wind_direction TEXT,
+    wind_power TEXT,
     construction_summary TEXT,
+    construction_status TEXT,
     workers_summary TEXT,
+    contractor_personnel TEXT,
     machinery_summary TEXT,
+    machinery TEXT,
     quality_summary TEXT,
     safety_summary TEXT,
     patrol_summary TEXT,
+    inspection_work TEXT,
+    material_acceptance TEXT,
+    acceptance_work TEXT,
+    standing_work TEXT,
+    meeting TEXT,
+    internal_work TEXT,
     issue_summary TEXT,
+    issues_and_actions TEXT,
     handling_opinion TEXT,
     tomorrow_plan TEXT,
+    other_matters TEXT,
+    specialist_supervisor_comments TEXT,
+    chief_engineer_comments TEXT,
     ai_generated INTEGER NOT NULL DEFAULT 0,
     confirmed INTEGER NOT NULL DEFAULT 0,
     created_at TEXT NOT NULL DEFAULT (datetime('now')),
@@ -235,6 +257,45 @@ CREATE TABLE IF NOT EXISTS diary (
     FOREIGN KEY (project_id) REFERENCES project(id)
 );
 """
+
+
+def _table_columns(connection: sqlite3.Connection, table_name: str) -> set[str]:
+    rows = connection.execute(f"PRAGMA table_info({table_name})").fetchall()
+    return {str(row["name"]) for row in rows}
+
+
+def _ensure_column(connection: sqlite3.Connection, table_name: str, column_name: str, definition: str) -> None:
+    if column_name not in _table_columns(connection, table_name):
+        connection.execute(f"ALTER TABLE {table_name} ADD COLUMN {column_name} {definition}")
+
+
+def ensure_schema_compatibility(connection: sqlite3.Connection) -> None:
+    _ensure_column(connection, "progress_record", "weight", "REAL")
+    diary_columns = {
+        "weekday": "TEXT",
+        "writer": "TEXT",
+        "city": "TEXT",
+        "weather_morning": "TEXT",
+        "weather_afternoon": "TEXT",
+        "humidity": "TEXT",
+        "wind_direction": "TEXT",
+        "wind_power": "TEXT",
+        "construction_status": "TEXT",
+        "contractor_personnel": "TEXT",
+        "machinery": "TEXT",
+        "inspection_work": "TEXT",
+        "material_acceptance": "TEXT",
+        "acceptance_work": "TEXT",
+        "standing_work": "TEXT",
+        "meeting": "TEXT",
+        "internal_work": "TEXT",
+        "issues_and_actions": "TEXT",
+        "other_matters": "TEXT",
+        "specialist_supervisor_comments": "TEXT",
+        "chief_engineer_comments": "TEXT",
+    }
+    for column_name, definition in diary_columns.items():
+        _ensure_column(connection, "diary", column_name, definition)
 
 
 AI_GENERATION_TABLE_SQL = """
@@ -288,7 +349,8 @@ def connect_database(database_path: Path) -> sqlite3.Connection:
 
 def initialize_database(settings: Settings) -> None:
     ensure_data_directories(settings)
-    with connect_database(settings.database_path) as connection:
+    connection = connect_database(settings.database_path)
+    try:
         connection.execute(PROJECT_TABLE_SQL)
         connection.execute(FILE_ASSET_TABLE_SQL)
         connection.execute(SMART_INBOX_TABLE_SQL)
@@ -303,9 +365,12 @@ def initialize_database(settings: Settings) -> None:
         connection.execute(AI_GENERATION_TABLE_SQL)
         connection.execute(APP_SETTING_TABLE_SQL)
         connection.execute(DOCUMENT_ARCHIVE_TABLE_SQL)
+        ensure_schema_compatibility(connection)
         connection.execute("UPDATE diary_material SET source_type = 'progress' WHERE source_type = 'progress_import'")
         connection.execute("UPDATE diary_material SET source_type = 'manual' WHERE source_type = 'quick_record'")
         connection.commit()
+    finally:
+        connection.close()
 
 
 def get_connection(settings: Settings) -> Iterator[sqlite3.Connection]:

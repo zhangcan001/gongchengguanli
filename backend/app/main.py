@@ -23,6 +23,8 @@ from .models import (
     DiaryMaterialCreate,
     DiaryMaterialSummaryResponse,
     DiaryMaterialUpdate,
+    DiaryWeatherFetchRequest,
+    DiaryWeatherResult,
     DocumentArchive,
     ExportFileResponse,
     HealthResponse,
@@ -37,6 +39,7 @@ from .models import (
     IssueSummaryResponse,
     IssueUpdate,
     ProgressDataQualityResponse,
+    ProgressDashboardV2Response,
     ProgressDelayAnalysisResponse,
     ProgressExportAnalysisRequest,
     ProgressImportAnalyzeRequest,
@@ -63,6 +66,7 @@ from .diary_materials import DiaryMaterialService
 from .export_service import ExportService
 from .issues import IssueService
 from .progress_analytics import ProgressAnalyticsService
+from .progress_dashboard_v2 import ProgressDashboardV2Service
 from .progress_import import (
     analyze_progress_import,
     get_import_batch_detail,
@@ -310,6 +314,32 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         except RepositoryError as error:
             handle_repository_error(error)
 
+    @app.get("/api/progress/dashboard-v2", response_model=ProgressDashboardV2Response)
+    def api_progress_dashboard_v2(
+        project_id: int = Query(...),
+        view_mode: str = Query(default="overview"),
+        data_date: date | None = Query(default=None),
+        batch_id: int | None = Query(default=None),
+        building: str | None = Query(default=None),
+        floor: str | None = Query(default=None),
+        discipline: str | None = Query(default=None),
+        calculation_method: str | None = Query(default=None),
+        connection: sqlite3.Connection = Depends(get_db),
+    ) -> dict:
+        try:
+            return ProgressDashboardV2Service(connection).get_dashboard(
+                project_id=project_id,
+                view_mode=view_mode,
+                data_date=data_date.isoformat() if data_date else None,
+                batch_id=batch_id,
+                building=building,
+                floor=floor,
+                discipline=discipline,
+                calculation_method=calculation_method,
+            )
+        except RepositoryError as error:
+            handle_repository_error(error)
+
     @app.post("/api/progress/export-analysis", response_model=ExportFileResponse)
     def api_export_progress_analysis(
         payload: ProgressExportAnalysisRequest,
@@ -435,6 +465,13 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     ) -> dict:
         try:
             return await DiaryService(connection).generate(payload)
+        except RepositoryError as error:
+            handle_repository_error(error)
+
+    @app.post("/api/diary/weather/fetch", response_model=DiaryWeatherResult)
+    async def api_fetch_diary_weather(payload: DiaryWeatherFetchRequest) -> dict:
+        try:
+            return await DiaryService.fetch_weather(payload)
         except RepositoryError as error:
             handle_repository_error(error)
 

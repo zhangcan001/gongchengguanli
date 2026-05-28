@@ -2947,6 +2947,98 @@ p {
   gap: 12px;
 }
 
+.personal-diary-shell {
+  display: grid;
+  grid-template-columns: minmax(220px, 0.72fr) minmax(520px, 1.55fr) minmax(280px, 0.9fr);
+  gap: 18px;
+  align-items: start;
+}
+
+.diary-history-panel,
+.diary-preview-panel,
+.diary-center-column {
+  display: grid;
+  gap: 16px;
+}
+
+.history-list {
+  display: grid;
+  gap: 10px;
+  max-height: 720px;
+  overflow: auto;
+  padding-right: 4px;
+}
+
+.history-item {
+  display: grid;
+  gap: 5px;
+  border: 1px solid rgba(79, 206, 255, 0.18);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  text-align: left;
+  background: rgba(5, 20, 36, 0.7);
+}
+
+.history-item:hover,
+.history-item.active {
+  border-color: var(--line-strong);
+  background: rgba(12, 43, 74, 0.84);
+}
+
+.history-item span,
+.history-item small {
+  color: var(--muted);
+  overflow-wrap: anywhere;
+}
+
+.personal-weather-grid {
+  grid-template-columns: repeat(4, minmax(120px, 1fr));
+}
+
+.personal-weather-grid .diary-manual-note-field {
+  grid-column: 1 / -1;
+}
+
+.personal-diary-form {
+  min-width: 0;
+}
+
+.personal-diary-fields {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 14px;
+}
+
+.personal-diary-fields .diary-draft-field:first-child,
+.personal-diary-fields .diary-draft-field:nth-child(4) {
+  grid-column: 1 / -1;
+}
+
+.personal-preview {
+  display: grid;
+  gap: 12px;
+}
+
+.preview-head h2 {
+  margin: 0;
+  color: var(--text);
+}
+
+.personal-preview pre {
+  max-height: 760px;
+  margin: 0;
+  overflow: auto;
+  white-space: pre-wrap;
+  word-break: break-word;
+  border: 1px solid rgba(79, 206, 255, 0.18);
+  border-radius: 8px;
+  padding: 16px;
+  color: #d8efff;
+  background: rgba(2, 12, 22, 0.72);
+  line-height: 1.65;
+}
+
 .diary-draft-panel {
   display: grid;
   gap: 16px;
@@ -3281,6 +3373,266 @@ p {
   display: grid;
   grid-template-columns: repeat(2, minmax(0, 1fr));
   gap: 18px;
+}
+
+.diary-draft-field select {
+  min-height: 38px;
+  border: 1px solid rgba(79, 206, 255, 0.2);
+  border-radius: 10px;
+  padding: 0 10px;
+  color: var(--text);
+  background: rgba(4, 16, 30, 0.72);
+}
+
+.dashboard-v2-page .dashboard-filter-panel {
+  display: grid;
+  gap: 14px;
+}
+
+.dashboard-filter-grid {
+  display: grid;
+  grid-template-columns: repeat(6, minmax(120px, 1fr));
+  gap: 12px;
+}
+
+.dashboard-filter-actions,
+.dashboard-tabs {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.dashboard-filter-actions span {
+  color: var(--muted);
+  font-size: 13px;
+  margin-right: auto;
+}
+
+.dashboard-tabs {
+  border-bottom: 1px solid var(--line);
+}
+
+.tab-button {
+  min-height: 44px;
+  border: 1px solid transparent;
+  border-bottom: 0;
+  border-radius: 10px 10px 0 0;
+  padding: 10px 18px;
+  color: var(--muted);
+  background: rgba(8, 25, 46, 0.52);
+}
+
+.tab-button.active {
+  color: var(--text);
+  border-color: var(--line);
+  background: rgba(14, 43, 76, 0.86);
+  box-shadow: var(--glow-blue);
+}
+
+.dashboard-v2-grid {
+  display: grid;
+  grid-template-columns: 1.1fr 0.9fr;
+  gap: 18px;
+}
+
+.dashboard-hero-panel {
+  display: grid;
+  grid-template-columns: 180px 1fr;
+  gap: 20px;
+  align-items: center;
+}
+
+.dashboard-progress-orbit {
+  display: grid;
+  width: 168px;
+  height: 168px;
+  place-items: center;
+  border: 1px solid rgba(34, 240, 229, 0.42);
+  border-radius: 50%;
+  background:
+    radial-gradient(circle, rgba(34, 240, 229, 0.18), transparent 58%),
+    rgba(8, 25, 46, 0.72);
+}
+
+.dashboard-progress-orbit strong {
+  color: var(--cyan);
+  font-size: 32px;
+}
+
+.dashboard-progress-orbit span {
+  color: var(--muted);
+  margin-top: -38px;
+}
+
+.compare-bars,
+.delay-distribution-list {
+  display: grid;
+  gap: 12px;
+}
+
+.progress-metric-bar {
+  display: grid;
+  grid-template-columns: 110px minmax(0, 1fr) 72px;
+  gap: 10px;
+  align-items: center;
+  color: var(--muted);
+  font-size: 13px;
+}
+
+.progress-metric-bar div {
+  overflow: hidden;
+  height: 10px;
+  border-radius: 999px;
+  background: rgba(118, 194, 230, 0.12);
+}
+
+.progress-metric-bar i {
+  display: block;
+  height: 100%;
+  border-radius: inherit;
+  background: linear-gradient(90deg, var(--blue), var(--cyan));
+}
+
+.progress-metric-bar strong {
+  color: var(--text);
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+}
+
+.status-serious_delay i,
+.status-obvious_delay i {
+  background: linear-gradient(90deg, var(--danger), var(--risk));
+}
+
+.status-slight_delay i {
+  background: linear-gradient(90deg, var(--risk), #ffd58b);
+}
+
+.dashboard-card-grid {
+  display: grid;
+  grid-template-columns: repeat(3, minmax(220px, 1fr));
+  gap: 14px;
+}
+
+.dashboard-group-card {
+  display: grid;
+  gap: 12px;
+  min-height: 156px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 16px;
+  color: var(--text);
+  text-align: left;
+  background: rgba(9, 28, 51, 0.76);
+}
+
+.dashboard-group-card:hover {
+  border-color: var(--line-strong);
+  box-shadow: var(--cockpit-hover-shadow);
+}
+
+.group-card-meta {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 8px;
+  color: var(--muted);
+  font-size: 12px;
+}
+
+.floor-heatmap {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(136px, 1fr));
+  gap: 10px;
+}
+
+.floor-cell {
+  display: grid;
+  gap: 5px;
+  min-height: 92px;
+  border: 1px solid var(--line);
+  border-radius: 8px;
+  padding: 12px;
+  color: var(--text);
+  text-align: left;
+  background: rgba(6, 27, 48, 0.74);
+}
+
+.floor-cell strong,
+.floor-cell span,
+.floor-cell small {
+  overflow-wrap: anywhere;
+}
+
+.floor-cell span {
+  color: var(--cyan);
+  font-size: 20px;
+  font-weight: 800;
+}
+
+.floor-cell.status-serious_delay,
+.floor-cell.status-obvious_delay {
+  border-color: rgba(255, 92, 119, 0.5);
+  background: rgba(83, 21, 35, 0.64);
+}
+
+.floor-cell.status-slight_delay {
+  border-color: rgba(255, 177, 95, 0.52);
+}
+
+.calculation-panel p {
+  color: var(--muted);
+  line-height: 1.7;
+}
+
+.capability-list {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-top: 12px;
+}
+
+.capability-chip {
+  border: 1px solid rgba(255, 177, 95, 0.38);
+  border-radius: 999px;
+  padding: 7px 10px;
+  color: #ffdcb6;
+  background: rgba(255, 177, 95, 0.08);
+  font-size: 12px;
+}
+
+.capability-chip.available {
+  border-color: rgba(84, 226, 155, 0.42);
+  color: #bfffe2;
+  background: rgba(84, 226, 155, 0.08);
+}
+
+.table-scroll {
+  overflow-x: auto;
+}
+
+.data-table {
+  width: 100%;
+  min-width: 760px;
+  border-collapse: collapse;
+}
+
+.data-table th,
+.data-table td {
+  border-bottom: 1px solid rgba(108, 218, 255, 0.14);
+  padding: 10px;
+  color: var(--muted);
+  text-align: left;
+  vertical-align: top;
+}
+
+.data-table th {
+  color: var(--text);
+  background: rgba(43, 168, 255, 0.09);
+}
+
+.danger-text {
+  color: var(--danger) !important;
 }
 
 .summary-list {
@@ -4226,6 +4578,11 @@ select option {
   .dashboard-metrics,
   .archive-metrics,
   .dashboard-grid,
+  .dashboard-filter-grid,
+  .dashboard-v2-grid,
+  .dashboard-card-grid,
+  .personal-diary-shell,
+  .personal-diary-fields,
   .issue-metrics,
   .diary-metrics,
   .diary-draft-grid,
@@ -4297,6 +4654,7 @@ select option {
   .upload-console,
   .inbox-row,
   .archive-card,
+  .dashboard-hero-panel,
   .issue-workbench,
   .diary-workbench,
   .quick-result-grid,
@@ -4395,11 +4753,18 @@ select option {
     .dashboard-metrics,
     .archive-metrics,
     .dashboard-grid,
+    .dashboard-filter-grid,
+    .dashboard-v2-grid,
+    .dashboard-card-grid,
+    .dashboard-hero-panel,
+    .personal-diary-shell,
+    .personal-diary-fields,
     .issue-metrics,
     .diary-metrics,
     .diary-draft-grid,
     .settings-grid,
     .diary-generate-grid,
+    .personal-weather-grid,
     .archive-filters,
     .archive-card,
     .issue-workbench,

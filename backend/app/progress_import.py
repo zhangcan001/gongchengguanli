@@ -34,6 +34,7 @@ PROGRESS_FIELDS = (
     "total_quantity",
     "cumulative_quantity",
     "period_quantity",
+    "weight",
     "planned_percent",
     "actual_percent",
     "planned_start_date",

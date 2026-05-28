@@ -120,14 +120,24 @@ function startBackend() {
   });
 }
 
-function isPortAvailable(host, port) {
+function isPortInUse(timeoutMs = 700) {
   return new Promise((resolve) => {
-    const server = net.createServer();
-    server.once("error", () => resolve(false));
-    server.once("listening", () => {
-      server.close(() => resolve(true));
+    let settled = false;
+    const done = (value) => {
+      if (!settled) {
+        settled = true;
+        resolve(value);
+      }
+    };
+    const socket = net.createConnection({ host: HOST, port: PORT, timeout: timeoutMs }, () => {
+      socket.end();
+      done(true);
     });
-    server.listen(port, host);
+    socket.on("error", () => done(false));
+    socket.on("timeout", () => {
+      socket.destroy();
+      done(false);
+    });
   });
 }
 
@@ -324,6 +334,8 @@ function stopBackend() {
       backendProcess = null;
       removeBackendPidFile();
     }
+  } else {
+    removeBackendPidFile();
   }
 }
 
@@ -361,10 +373,9 @@ app.whenReady().then(async () => {
   ensureDataDirectories(dataDir);
   logLine("[desktop] starting");
   createWindow();
-  const portAvailable = await isPortAvailable(HOST, PORT);
-  if (!portAvailable) {
-    backendError = `端口 ${PORT} 已被占用，本地后端无法启动。请关闭占用该端口的程序，或设置 SMART_SUPERVISION_PORT 后重试。`;
-    logLine(`[desktop:port-conflict] ${backendError}`);
+  if (await isPortInUse()) {
+    backendError = `本地服务端口 ${PORT} 已被占用，请关闭其他智能工程监理工作台窗口，或设置 SMART_SUPERVISION_PORT 后重新启动。`;
+    logLine(`[desktop:port-in-use] ${backendError}`);
     showStartupError(backendError);
     dialog.showErrorBox(APP_TITLE, backendError);
     return;
