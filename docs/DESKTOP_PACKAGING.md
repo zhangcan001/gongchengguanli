@@ -8,6 +8,8 @@
 - React + TypeScript 通过 `vite build` 输出到 `frontend/dist`，Electron 直接加载本地 `index.html`。
 - FastAPI 使用 PyInstaller 打成 `smart-supervision-backend.exe`，Electron 启动时作为子进程自动拉起。
 - Electron 关闭窗口时会终止后端子进程。
+- 后端启动后会写入 `data/logs/desktop-backend.pid`，Electron 关闭时会结合启动器 PID 和运行时 PID 做清理，避免 one-file exe 残留进程。
+- Electron 启动后端前会检查 `127.0.0.1:8765` 是否被占用；如端口冲突，会显示明确错误页和弹窗，而不是白屏。
 - 前端通过 `window.smartWorkbench.apiBase` 请求本地后端，例如 `http://127.0.0.1:8765/api/health`。
 - AI 相关功能仍按已有配置联网调用；无 AI 配置不影响基础业务。
 
@@ -69,6 +71,7 @@ python -m PyInstaller desktop_build.spec --clean --noconfirm
 
 ```powershell
 cd frontend
+npm.cmd run desktop:dir
 npm.cmd run desktop:pack
 ```
 

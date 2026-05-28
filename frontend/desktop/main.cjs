@@ -15,7 +15,7 @@ let backendError = "";
 let dataDir = "";
 
 function userDataDir() {
-  return path.join(app.getPath("userData"), "data");
+  return path.join(app.getPath("appData"), APP_TITLE, "data");
 }
 
 function ensureDataDirectories(root) {
@@ -50,6 +50,28 @@ function logLine(message) {
   }
 }
 
+function backendPidFile() {
+  return path.join(dataDir, "logs", "desktop-backend.pid");
+}
+
+function removeBackendPidFile() {
+  try {
+    fs.rmSync(backendPidFile(), { force: true });
+  } catch {
+    // PID cleanup is best-effort.
+  }
+}
+
+function readBackendRuntimePid() {
+  try {
+    const raw = fs.readFileSync(backendPidFile(), "utf8").trim();
+    const pid = Number(raw);
+    return Number.isInteger(pid) && pid > 0 ? pid : null;
+  } catch {
+    return null;
+  }
+}
+
 function resolveBackendExecutable() {
   const resourceExe = path.join(process.resourcesPath, "backend", "smart-supervision-backend.exe");
   if (app.isPackaged && fs.existsSync(resourceExe)) {
@@ -67,6 +89,7 @@ function resolveBackendExecutable() {
 
 function startBackend() {
   const backend = resolveBackendExecutable();
+  removeBackendPidFile();
   const env = {
     ...process.env,
     SMART_SUPERVISION_DATA_DIR: dataDir,
@@ -276,27 +299,43 @@ function tarDirectory(sourceDir, outputPath) {
 }
 
 function stopBackend() {
-  if (backendProcess && !backendProcess.killed) {
-    const backendPid = backendProcess.pid;
+  const candidatePids = [backendProcess?.pid, readBackendRuntimePid()].filter(
+    (pid, index, pids) => Number.isInteger(pid) && pid > 0 && pids.indexOf(pid) === index,
+  );
+
+  if (candidatePids.length > 0) {
     try {
-      if (process.platform === "win32" && backendPid) {
-        spawnSync("taskkill", ["/PID", String(backendPid), "/T", "/F"], {
-          windowsHide: true,
-          stdio: "ignore",
-        });
+      if (process.platform === "win32") {
+        for (const pid of candidatePids) {
+          spawnSync("taskkill", ["/PID", String(pid), "/T", "/F"], {
+            windowsHide: true,
+            stdio: "ignore",
+          });
+        }
       } else {
-        backendProcess.kill("SIGTERM");
+        for (const pid of candidatePids) {
+          try {
+            process.kill(pid, "SIGTERM");
+          } catch {
+            // Process may already be gone.
+          }
+        }
       }
     } catch (error) {
       logLine(`[backend:stop-error] ${error.message}`);
       try {
-        backendProcess.kill("SIGKILL");
+        if (backendProcess && !backendProcess.killed) {
+          backendProcess.kill("SIGKILL");
+        }
       } catch {
         // Nothing else to do during app shutdown.
       }
     } finally {
       backendProcess = null;
+      removeBackendPidFile();
     }
+  } else {
+    removeBackendPidFile();
   }
 }
 
