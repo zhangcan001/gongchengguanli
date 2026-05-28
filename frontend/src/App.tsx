@@ -198,49 +198,50 @@ function App() {
     }
   }
 
+  function resetHomeDashboard() {
+    setHomeProgressOverview(null);
+    setHomeIssueSummary(null);
+    setHomeDiarySummary(null);
+    setHomeDiary(null);
+    setHomeArchives([]);
+  }
+
+  async function loadHomeDashboard(projectId = projects[0]?.id, shouldApply: () => boolean = () => true) {
+    if (!projectId) {
+      if (shouldApply()) {
+        resetHomeDashboard();
+      }
+      return;
+    }
+
+    const todayIso = localDateInputValue();
+    const [progressResult, issueResult, diaryResult, diaryStatusResult, archiveResult] = await Promise.allSettled([
+      fetchProgressOverview(projectId),
+      fetchIssueSummary(projectId),
+      fetchDiaryMaterialSummary(projectId, todayIso),
+      fetchDiary(projectId, todayIso),
+      fetchArchives({ project_id: projectId }),
+    ]);
+
+    if (!shouldApply()) {
+      return;
+    }
+
+    setHomeProgressOverview(progressResult.status === "fulfilled" ? progressResult.value : null);
+    setHomeIssueSummary(issueResult.status === "fulfilled" ? issueResult.value : null);
+    setHomeDiarySummary(diaryResult.status === "fulfilled" ? diaryResult.value : null);
+    setHomeDiary(diaryStatusResult.status === "fulfilled" ? diaryStatusResult.value : null);
+    setHomeArchives(archiveResult.status === "fulfilled" ? archiveResult.value : []);
+  }
+
   useEffect(() => {
     void loadProjects();
     void loadInbox();
   }, []);
 
   useEffect(() => {
-    const projectId = projects[0]?.id;
-    if (!projectId) {
-      setHomeProgressOverview(null);
-      setHomeIssueSummary(null);
-      setHomeDiarySummary(null);
-      setHomeDiary(null);
-      setHomeArchives([]);
-      return;
-    }
-
     let active = true;
-    const todayIso = localDateInputValue();
-    Promise.allSettled([
-      fetchProgressOverview(projectId),
-      fetchIssueSummary(projectId),
-      fetchDiaryMaterialSummary(projectId, todayIso),
-      fetchDiary(projectId, todayIso),
-      fetchArchives({ project_id: projectId }),
-    ])
-      .then(([progressResult, issueResult, diaryResult, diaryStatusResult, archiveResult]) => {
-        if (active) {
-          setHomeProgressOverview(progressResult.status === "fulfilled" ? progressResult.value : null);
-          setHomeIssueSummary(issueResult.status === "fulfilled" ? issueResult.value : null);
-          setHomeDiarySummary(diaryResult.status === "fulfilled" ? diaryResult.value : null);
-          setHomeDiary(diaryStatusResult.status === "fulfilled" ? diaryStatusResult.value : null);
-          setHomeArchives(archiveResult.status === "fulfilled" ? archiveResult.value : []);
-        }
-      })
-      .catch(() => {
-        if (active) {
-          setHomeProgressOverview(null);
-          setHomeIssueSummary(null);
-          setHomeDiarySummary(null);
-          setHomeDiary(null);
-          setHomeArchives([]);
-        }
-      });
+    void loadHomeDashboard(projects[0]?.id, () => active);
 
     return () => {
       active = false;
@@ -249,6 +250,9 @@ function App() {
 
   function navigate(nextView: View) {
     setView(nextView);
+    if (nextView.name === "home") {
+      void loadHomeDashboard();
+    }
     if (nextView.name === "projects") {
       void loadProjects();
     }
