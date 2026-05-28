@@ -1,6 +1,7 @@
 import json
 import sqlite3
 
+from app.ai_service import AIUnavailableError
 from tests.test_smart_inbox import create_project
 
 
@@ -51,6 +52,34 @@ def test_generate_diary_fallback_without_ai_config(client):
     assert payload["used_ai"] is False
     assert payload["ai_generation_id"] > 0
     assert "今日现场施工正常" in payload["draft"]["construction_summary"]
+
+
+def test_generate_diary_fallback_when_ai_call_fails(client, monkeypatch):
+    project = create_project(client)
+    client.put(
+        "/api/settings/ai",
+        json={"base_url": "https://api.example.com/v1", "api_key": "sk-live-secret-123456", "model": "test-model"},
+    )
+
+    async def fail_generate_json(self, *, prompt: str):
+        raise AIUnavailableError("simulated ai outage")
+
+    monkeypatch.setattr("app.ai_service.AIService.generate_json", fail_generate_json)
+
+    response = client.post(
+        "/api/diary/generate",
+        json={
+            "project_id": project["id"],
+            "diary_date": "2026-05-26",
+            "manual_note": "AI 不可用时仍应生成基础草稿。",
+        },
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["used_ai"] is False
+    assert "simulated ai outage" in payload["message"]
+    assert "AI 不可用时仍应生成基础草稿" in payload["draft"]["construction_summary"]
 
 
 def test_generate_diary_uses_materials_in_draft(client):
@@ -158,6 +187,38 @@ def test_ai_generation_record_created_for_fallback(client):
     assert row[0] == "diary_generate"
     assert row[1].startswith("used_ai=0;")
     assert "construction_summary" in json.loads(row[2])
+
+
+def test_api_key_not_written_to_diary_generation_records(client, monkeypatch):
+    project = create_project(client)
+    secret = "sk-test-super-secret-value"
+    client.put(
+        "/api/settings/ai",
+        json={"base_url": "https://api.example.com/v1", "api_key": secret, "model": "test-model"},
+    )
+
+    async def fail_generate_json(self, *, prompt: str):
+        raise AIUnavailableError("network unavailable")
+
+    monkeypatch.setattr("app.ai_service.AIService.generate_json", fail_generate_json)
+
+    response = client.post(
+        "/api/diary/generate",
+        json={"project_id": project["id"], "diary_date": "2026-05-26", "manual_note": "脱敏验证"},
+    )
+
+    assert response.status_code == 200
+    generation_id = response.json()["ai_generation_id"]
+    settings = client.app.state.settings
+    with sqlite3.connect(settings.database_path) as connection:
+        row = connection.execute(
+            "SELECT source_data_summary, prompt, result, edited_result FROM ai_generation WHERE id = ?",
+            (generation_id,),
+        ).fetchone()
+    serialized = json.dumps(list(row), ensure_ascii=False)
+    assert secret not in serialized
+    assert "sk-test-super-secret-value" not in serialized
+    assert "****" not in serialized
 
 
 def test_generate_and_confirm_personal_diary_fields(client):

@@ -112,6 +112,33 @@ def test_mark_diary_material_used_and_unused(client):
     assert summary.json()["unused_count"] == 1
 
 
+def test_diary_material_summary_counts_core_sources(client):
+    project = create_project(client)
+    source_types = ["progress", "patrol", "issue", "issue_action", "manual"]
+    for source_type in source_types:
+        response = client.post(
+            "/api/diary/materials",
+            json={
+                "project_id": project["id"],
+                "material_date": "2026-05-26",
+                "source_type": source_type,
+                "content": f"{source_type} 素材",
+            },
+        )
+        assert response.status_code == 201
+
+    summary = client.get(f"/api/diary/materials/summary?project_id={project['id']}&date=2026-05-26")
+
+    assert summary.status_code == 200
+    payload = summary.json()
+    assert payload["progress_count"] == 1
+    assert payload["patrol_count"] == 1
+    assert payload["issue_count"] == 1
+    assert payload["review_count"] == 1
+    assert payload["manual_count"] == 1
+    assert payload["total_count"] == 5
+
+
 def test_delete_diary_material(client):
     project = create_project(client)
     material = client.post(

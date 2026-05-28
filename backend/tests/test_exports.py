@@ -1,5 +1,6 @@
 import sqlite3
 from datetime import date
+from zipfile import ZipFile
 
 from docx import Document
 from openpyxl import load_workbook
@@ -107,6 +108,28 @@ def test_diary_word_export_creates_file_asset_and_download(client):
     download = client.get(payload["download_url"])
     assert download.status_code == 200
     assert len(download.content) == payload["file_size"]
+
+
+def test_diary_word_export_does_not_include_api_key(client):
+    project = create_project(client)
+    secret = "sk-export-secret-123456"
+    client.put(
+        "/api/settings/ai",
+        json={"base_url": "https://api.example.com/v1", "api_key": secret, "model": "test-model"},
+    )
+    diary = _create_confirmed_diary(client, project["id"])
+
+    response = client.post(f"/api/diary/{diary['id']}/export")
+
+    assert response.status_code == 200
+    payload = response.json()
+    path = _asset_path(client, payload)
+    document = Document(path)
+    text = "\n".join(paragraph.text for paragraph in document.paragraphs)
+    assert secret not in text
+    with ZipFile(path) as zip_file:
+        document_xml = zip_file.read("word/document.xml").decode("utf-8")
+    assert secret not in document_xml
 
 
 def test_patrol_word_export(client):
