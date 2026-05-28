@@ -1,5 +1,7 @@
 import sqlite3
 
+import pytest
+
 from tests.test_smart_inbox import create_project
 
 
@@ -66,6 +68,63 @@ def test_quick_record_detects_building_and_floor_variants(client):
     assert underground["detected"]["floor"] == "地下二层"
     assert b_floor["detected"]["building"] == "1#楼"
     assert b_floor["detected"]["floor"] == "B1"
+
+
+@pytest.mark.parametrize(
+    ("content", "building", "floor"),
+    [
+        ("1#楼12层模板拼缝不严。", "1#楼", "12层"),
+        ("1号楼十二层砌体灰缝不饱满。", "1#楼", "12层"),
+        ("1栋B2临电箱未上锁。", "1#楼", "B2"),
+        ("2#楼地下室电缆拖地。", "2#楼", "地下室"),
+        ("3号楼12层资料未同步报审。", "3#楼", "12层"),
+    ],
+)
+def test_quick_record_supports_required_building_floor_patterns(client, content, building, floor):
+    project = create_project(client)
+
+    response = client.post("/api/quick-record/analyze", json={"project_id": project["id"], "content": content})
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["detected"]["building"] == building
+    assert payload["detected"]["floor"] == floor
+
+
+@pytest.mark.parametrize(
+    ("content", "issue_type"),
+    [
+        ("3#楼12层砌体灰缝不饱满。", "quality"),
+        ("2#楼地下室临电电缆拖地。", "safety"),
+        ("1#楼12层砌筑进度滞后。", "progress"),
+        ("3号楼12层验收资料缺失。", "document"),
+        ("现场需要协调材料堆放位置。", "other"),
+    ],
+)
+def test_quick_record_detects_required_issue_types(client, content, issue_type):
+    project = create_project(client)
+
+    response = client.post("/api/quick-record/analyze", json={"project_id": project["id"], "content": content})
+
+    assert response.status_code == 200
+    assert response.json()["detected"]["issue_type"] == issue_type
+
+
+def test_quick_record_generates_patrol_issue_rectification_and_diary_drafts(client):
+    project = create_project(client)
+
+    response = client.post(
+        "/api/quick-record/analyze",
+        json={"project_id": project["id"], "content": "3号楼12层砌体灰缝不饱满，要求整改。"},
+    )
+
+    assert response.status_code == 200
+    generated = response.json()["generated_text"]
+    assert "巡视发现砌体灰缝不饱满" in generated["patrol_content"]
+    assert generated["issue_title"].startswith("质量问题：砌体灰缝不饱满")
+    assert generated["issue_description"] == "砌体灰缝不饱满"
+    assert "整改完成后报监理复查" in generated["rectification_requirement"]
+    assert "已提出整改要求" in generated["diary_material"]
 
 
 def test_quick_record_confirm_creates_patrol_issue_and_diary_material(client):

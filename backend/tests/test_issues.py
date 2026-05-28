@@ -1,3 +1,4 @@
+import sqlite3
 from datetime import date, timedelta
 
 from tests.test_smart_inbox import create_project
@@ -96,6 +97,27 @@ def test_review_issue_can_keep_pending_review(client):
     assert payload["actions"][-1]["action_type"] == "review"
 
 
+def test_review_issue_can_close_with_complete_actions(client):
+    project = create_project(client)
+    issue = create_issue(client, project["id"])
+    client.post(f"/api/issues/{issue['id']}/notify", json={"content": "通知整改", "operator": "王监理"})
+    client.post(
+        f"/api/issues/{issue['id']}/reply",
+        json={"content": "已整改", "operator": "施工单位", "mark_pending_review": True},
+    )
+
+    response = client.post(
+        f"/api/issues/{issue['id']}/review",
+        json={"content": "复查合格，同意关闭。", "operator": "王监理", "close_issue": True},
+    )
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "closed"
+    assert payload["archive_check"]["items"]["has_close"] is True
+    assert [action["action_type"] for action in payload["actions"]][-2:] == ["review", "close"]
+
+
 def test_close_issue_requires_review_opinion(client):
     project = create_project(client)
     issue = create_issue(client, project["id"])
@@ -106,6 +128,19 @@ def test_close_issue_requires_review_opinion(client):
     )
 
     assert response.status_code == 422
+
+
+def test_close_issue_requires_pending_review_flow(client):
+    project = create_project(client)
+    issue = create_issue(client, project["id"])
+
+    response = client.post(
+        f"/api/issues/{issue['id']}/close",
+        json={"content": "复查合格，同意关闭。", "operator": "王监理"},
+    )
+
+    assert response.status_code == 409
+    assert response.json()["detail"]["code"] == "INVALID_ISSUE_STATUS_TRANSITION"
 
 
 def test_close_issue_records_review_close_and_closed_at(client):
@@ -159,7 +194,47 @@ def test_archive_check_returns_missing_items(client):
     assert "缺少通知记录" in payload["missing_items"]
     assert "缺少整改回复" in payload["missing_items"]
     assert "缺少复查意见" in payload["missing_items"]
+    assert "缺少关闭记录" in payload["missing_items"]
     assert "缺少关联附件" in payload["missing_items"]
+
+
+def test_archive_check_can_be_complete_after_closed_issue_has_attachment(client):
+    project = create_project(client)
+    issue = create_issue(client, project["id"])
+    client.post(f"/api/issues/{issue['id']}/notify", json={"content": "通知整改", "operator": "王监理"})
+    client.post(f"/api/issues/{issue['id']}/reply", json={"content": "已整改", "operator": "施工单位"})
+    client.post(f"/api/issues/{issue['id']}/close", json={"content": "复查合格", "operator": "王监理"})
+
+    settings = client.app.state.settings
+    with sqlite3.connect(settings.database_path) as connection:
+        connection.execute(
+            """
+            INSERT INTO file_asset (
+                project_id, business_type, business_id, file_name, original_file_name,
+                file_path, file_type, mime_type, file_size
+            )
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            """,
+            (
+                project["id"],
+                "issue",
+                issue["id"],
+                "review.docx",
+                "review.docx",
+                "files/exports/review.docx",
+                "docx",
+                "application/vnd.openxmlformats-officedocument.wordprocessingml.document",
+                128,
+            ),
+        )
+        connection.commit()
+
+    response = client.get(f"/api/issues/{issue['id']}/archive-check")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["complete"] is True
+    assert payload["missing_items"] == []
 
 
 def test_issue_actions_are_complete_for_main_flow(client):
@@ -174,6 +249,25 @@ def test_issue_actions_are_complete_for_main_flow(client):
     assert response.status_code == 200
     action_types = [action["action_type"] for action in response.json()]
     assert action_types == ["create", "notify", "reply", "review", "close"]
+
+
+def test_archiving_closed_issue_records_archive_action(client):
+    project = create_project(client)
+    issue = create_issue(client, project["id"])
+    client.post(f"/api/issues/{issue['id']}/notify", json={"content": "通知整改", "operator": "王监理"})
+    client.post(f"/api/issues/{issue['id']}/reply", json={"content": "已整改", "operator": "施工单位"})
+    closed = client.post(f"/api/issues/{issue['id']}/close", json={"content": "复查合格", "operator": "王监理"}).json()
+
+    response = client.put(f"/api/issues/{closed['id']}", json={"status": "archived"})
+    list_response = client.get(f"/api/issues?project_id={project['id']}&status=archived")
+
+    assert response.status_code == 200
+    payload = response.json()
+    assert payload["status"] == "archived"
+    assert payload["actions"][-1]["action_type"] == "archive"
+    assert payload["archive_check"]["items"]["has_close"] is True
+    assert list_response.status_code == 200
+    assert len(list_response.json()) == 1
 
 
 def test_reopen_closed_issue(client):

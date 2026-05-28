@@ -306,6 +306,8 @@ class QuickRecordDetected(BaseModel):
 
 class QuickRecordGeneratedText(BaseModel):
     patrol_content: str
+    issue_title: str
+    issue_description: str
     rectification_requirement: str
     diary_material: str
 
@@ -322,6 +324,8 @@ class QuickRecordConfirmFields(BaseModel):
     area: str | None = None
     discipline: str | None = None
     issue_type: str | None = None
+    issue_title: str | None = None
+    issue_description: str | None = None
     description: str | None = None
     patrol_content: str | None = None
     rectification_requirement: str | None = None

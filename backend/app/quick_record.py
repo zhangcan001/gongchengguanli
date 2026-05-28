@@ -203,7 +203,7 @@ class QuickRecordService:
         patrol_record_id: int | None = None
         diary_material_id: int | None = None
 
-        description = (fields.description or fields.patrol_content or "现场情况记录").strip()
+        description = (fields.description or fields.issue_description or fields.patrol_content or "现场情况记录").strip()
         patrol_content = (fields.patrol_content or description).strip()
         rectification_requirement = (fields.rectification_requirement or self._default_rectification(description)).strip()
         diary_content = (fields.diary_material or self._default_diary_material(fields.building or "", fields.floor or "", description)).strip()
@@ -214,7 +214,7 @@ class QuickRecordService:
                     project_id=payload.project_id,
                     issue_type=fields.issue_type or "other",
                     level=fields.level or "normal",
-                    title=self._issue_title(fields.issue_type or "other", description),
+                    title=(fields.issue_title or self._issue_title(fields.issue_type or "other", description)).strip(),
                     description=description,
                     building=fields.building,
                     floor=fields.floor,
@@ -305,6 +305,8 @@ class QuickRecordService:
             rectification_requirement = f"请施工单位及时补齐相关资料，完成报审和归档，确保资料与现场同步。"
         return {
             "patrol_content": f"{patrol_content}问题类型初判为{issue_label}。",
+            "issue_title": self._issue_title(detected.issue_type, description),
+            "issue_description": description,
             "rectification_requirement": rectification_requirement,
             "diary_material": diary_material,
         }

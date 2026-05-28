@@ -34,6 +34,7 @@ ARCHIVE_ITEM_LABELS = {
     "has_notify": "缺少通知记录",
     "has_reply": "缺少整改回复",
     "has_review": "缺少复查意见",
+    "has_close": "缺少关闭记录",
     "has_attachment": "缺少关联附件",
 }
 
@@ -215,6 +216,7 @@ def _archive_items(connection: sqlite3.Connection, issue_id: int) -> dict[str, b
         "has_notify": "notify" in action_types,
         "has_reply": "reply" in action_types,
         "has_review": "review" in action_types or "close" in action_types,
+        "has_close": "close" in action_types,
         "has_attachment": attachment is not None,
     }
 
@@ -318,20 +320,42 @@ class IssueService:
         return _issue_to_dict(self.connection, _get_issue_row(self.connection, issue_id), include_actions=True)
 
     def update_issue(self, issue_id: int, payload: IssueUpdate) -> dict[str, Any]:
-        _get_issue_row(self.connection, issue_id)
+        issue = _get_issue_row(self.connection, issue_id)
         data = payload.model_dump(exclude_unset=True)
         if not data:
             return self.get_issue(issue_id)
         self._validate_payload_values(data)
+        target_status = data.get("status")
+        should_archive = target_status == "archived" and issue["status"] != "archived"
+        if target_status == "closed" and issue["status"] != "closed":
+            raise RepositoryError(ErrorCode.ISSUE_REVIEW_REQUIRED, "Review opinion is required before closing issue.")
+        if should_archive:
+            _require_transition(issue["status"], {"closed"}, "archived")
         assignments = [f"{column} = ?" for column in data]
         values = [_serialize_date(value) for value in data.values()]
         values.append(issue_id)
-        self.connection.execute(
-            f"UPDATE issue SET {', '.join(assignments)}, updated_at = datetime('now') WHERE id = ?",
-            values,
-        )
-        self.connection.commit()
-        return self.get_issue(issue_id)
+        try:
+            self.connection.execute(
+                f"UPDATE issue SET {', '.join(assignments)}, updated_at = datetime('now') WHERE id = ?",
+                values,
+            )
+            if should_archive:
+                _insert_action(
+                    self.connection,
+                    issue_id=issue_id,
+                    action_type="archive",
+                    content="问题闭环资料已归档，状态更新为已归档。",
+                    operator=None,
+                    action_date=date.today(),
+                )
+            self.connection.commit()
+        except Exception:
+            self.connection.rollback()
+            raise
+        item = self.get_issue(issue_id)
+        if should_archive:
+            item["archive_check"] = self.archive_check(issue_id)
+        return item
 
     def notify_issue(self, issue_id: int, payload: IssueActionInput) -> dict[str, Any]:
         issue = _get_issue_row(self.connection, issue_id)
@@ -377,12 +401,26 @@ class IssueService:
             action_date=payload.action_date,
         )
         self._insert_issue_action_material(issue, action_id, "review", payload)
+        if payload.close_issue:
+            close_action_id = _insert_action(
+                self.connection,
+                issue_id=issue_id,
+                action_type="close",
+                content=payload.content,
+                operator=payload.operator,
+                action_date=payload.action_date,
+            )
+            self._insert_issue_action_material(issue, close_action_id, "close", payload)
         _update_status(self.connection, issue_id, "closed" if payload.close_issue else "pending_review", closed=payload.close_issue)
         self.connection.commit()
-        return self.get_issue(issue_id)
+        item = self.get_issue(issue_id)
+        if payload.close_issue:
+            item["archive_check"] = self.archive_check(issue_id)
+        return item
 
     def close_issue(self, issue_id: int, payload: IssueCloseRequest) -> dict[str, Any]:
         issue = _get_issue_row(self.connection, issue_id)
+        _require_transition(issue["status"], {"replied", "pending_review"}, "closed")
         if not payload.content.strip():
             raise RepositoryError(ErrorCode.ISSUE_REVIEW_REQUIRED, "Review opinion is required before closing issue.")
         review_action_id = _insert_action(
