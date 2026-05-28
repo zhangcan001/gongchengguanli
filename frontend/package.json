@@ -30,7 +30,7 @@
   },
   "build": {
     "appId": "com.smart-supervision.workbench",
-    "productName": "Smart Supervision Workbench",
+    "productName": "智能工程监理工作台",
     "directories": {
       "output": "release"
     },

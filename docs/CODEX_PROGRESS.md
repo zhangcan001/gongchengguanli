@@ -249,3 +249,134 @@
 ### 是否建议合并
 
 - 是
+
+---
+
+## 2026-05-28 / codex/DaBao / 桌面端打包模块
+
+### 本轮目标
+
+- 使用独立 worktree / `codex/DaBao` 分支完成桌面端打包模块验证与修复。
+- 保证 PyInstaller 后端 exe、Electron 解包版和安装包打包链路可用。
+- 默认数据目录统一为 `%APPDATA%\智能工程监理工作台\data`。
+- 后端启动失败、端口冲突、关闭清理和日志写入有明确处理。
+
+### 已完成
+
+- 后端桌面入口默认数据目录改为 `%APPDATA%\智能工程监理工作台\data`。
+- 后端启动时写入 `data/logs/desktop-backend.pid`，用于 Electron 关闭时清理真实运行进程。
+- Electron 默认数据目录改为 `%APPDATA%\智能工程监理工作台\data`，并继续支持 `SMART_SUPERVISION_DATA_DIR` 覆盖。
+- Electron 启动后端前检查 `127.0.0.1:8765` 端口占用，冲突时显示错误页和错误弹窗，避免白屏。
+- Electron 关闭时结合启动器 PID 和后端运行时 PID 执行清理，验证关闭后后端进程退出、端口释放。
+- 桌面端产品名改为 `智能工程监理工作台`，`desktop:dir` 输出中文 exe。
+- 更新 `docs/DESKTOP_PACKAGING.md`，补充 PID 清理、端口冲突和 `desktop:dir` 打包说明。
+
+### 修改文件
+
+- `backend/desktop_server.py`
+- `frontend/desktop/main.cjs`
+- `frontend/package.json`
+- `docs/DESKTOP_PACKAGING.md`
+- `docs/CODEX_PROGRESS.md`
+
+### 测试结果
+
+- 前端依赖安装：`cd frontend && npm install` 通过。
+- 前端 build：`cd frontend && npm run build` 通过。
+- 后端 PyInstaller：`cd backend && python -m PyInstaller desktop_build.spec --clean --noconfirm` 通过，生成 `backend/dist/smart-supervision-backend.exe`。
+- 后端 exe 启动：`smart-supervision-backend.exe` 可启动，`GET /api/health` 返回 `ok / 1.0-smart`。
+- 数据目录：确认使用 `C:\Users\ADMIN\AppData\Roaming\智能工程监理工作台\data`，`db`、`files/uploads`、`files/exports`、`files/archive`、`templates/word`、`templates/excel`、`backups`、`logs` 均创建。
+- 日志：`desktop-backend.log`、`desktop-shell.log` 可写，后端 PID 文件可写。
+- 解包版：`cd frontend && npm run desktop:dir` 通过，生成 `frontend/release/win-unpacked/智能工程监理工作台.exe`。
+- 解包版运行：Electron 可自动启动后端，加载前端资源，`/api/health` 正常；关闭窗口后端进程退出、8765 端口释放。
+- 端口冲突：手动占用 8765 后启动 Electron，`desktop-shell.log` 记录 `desktop:port-conflict` 和明确中文提示。
+- 安装包：`cd frontend && npm run desktop:pack` 通过，生成 `frontend/release/Smart-Supervision-Workbench-1.0.0-setup.exe`。
+- 后端 pytest：未运行，本轮未修改 `backend/app/` 或 `backend/tests/`。
+
+### 剩余问题
+
+#### P0
+
+- 无
+
+#### P1
+
+- 无
+
+#### P2
+
+- PyInstaller 在 Python 3.14 环境下输出 Pydantic V1 兼容性 warning，但本轮 exe 启动和 `/api/health` 验证通过。
+- electron-builder 提示 `description`、`author` 缺失且使用默认图标，不影响本轮可运行性，后续可补品牌信息和图标。
+
+### 下一步建议
+
+- 合并 UI 和业务模块后，在最终集成分支重新执行 `npm run desktop:dir` 并走一次完整主链路。
+- 后续可补充应用图标、安装包发布信息和代码签名策略。
+
+### 是否建议合并
+
+- 是
+
+---
+
+## 2026-05-28 / codex/DaBao / 桌面端打包模块复验
+
+### 本轮目标
+
+- 按最新任务要求重新阅读项目约束和模块边界。
+- 重新运行 `npm install`、`npm run build`、`npm run desktop:dir`。
+- 重新验证 PyInstaller 后端 exe、`/api/health`、默认数据目录、日志写入、Electron 自动启动后端、前端 dist 加载和关闭进程清理。
+- 如可行运行 `npm run desktop:pack` 并记录结果。
+
+### 已完成
+
+- 确认当前 worktree 为 `C:\Users\ADMIN\Documents\gongchengguanli`，分支为 `codex/DaBao`。
+- 重新确认未修改 `backend/app/`、`backend/tests/`、`frontend/src/`，未新增业务功能或 v1.1 功能。
+- 重新执行前端依赖安装与生产构建。
+- 重新执行 PyInstaller 后端 exe 打包，并直接启动 exe 验证 `/api/health`。
+- 重新执行 `desktop:dir`，并实测解包版 `智能工程监理工作台.exe`。
+- 重新执行 `desktop:pack`，安装包生成成功。
+- 验证默认数据目录为 `C:\Users\ADMIN\AppData\Roaming\智能工程监理工作台\data`，日志和 PID 文件可写。
+- 验证关闭 Electron 窗口后后端进程退出，8765 端口释放。
+
+### 修改文件
+
+- `docs/CODEX_PROGRESS.md`
+
+### 测试结果
+
+- 前端依赖安装：`cd frontend && npm install` 通过。
+- 前端 build：`cd frontend && npm run build` 通过。
+- 后端 PyInstaller：`cd backend && python -m PyInstaller desktop_build.spec --clean --noconfirm` 通过。
+- 后端 exe：`backend/dist/smart-supervision-backend.exe` 可启动，`GET http://127.0.0.1:8765/api/health` 返回 `status=ok`、`version=1.0-smart`。
+- 数据目录：`C:\Users\ADMIN\AppData\Roaming\智能工程监理工作台\data`，所需 `db`、`files/uploads`、`files/exports`、`files/archive`、`templates/word`、`templates/excel`、`backups`、`logs` 目录存在。
+- 日志：`desktop-backend.log`、`desktop-shell.log` 可写，`desktop-backend.pid` 可写。
+- `desktop:dir`：通过，生成 `frontend/release/win-unpacked/智能工程监理工作台.exe`。
+- 解包版启动验证：Electron 自动启动后端，前端资源存在并可加载，`/api/health` 正常。
+- 关闭验证：关闭 Electron 后 `smart-supervision-backend.exe` 退出，`127.0.0.1:8765` 不再监听。
+- `desktop:pack`：通过，生成 `frontend/release/Smart-Supervision-Workbench-1.0.0-setup.exe` 和 blockmap。
+- 后端 pytest：未运行，本轮未修改后端业务逻辑或测试。
+
+### 剩余问题
+
+#### P0
+
+- 无
+
+#### P1
+
+- 无
+
+#### P2
+
+- PyInstaller 在 Python 3.14 环境下仍输出 Pydantic V1 兼容性 warning，但后端 exe 启动和 `/api/health` 验证通过。
+- electron-builder 仍提示 `description`、`author` 缺失且使用默认图标，不影响本轮可运行性。
+
+### 下一步建议
+
+- 合并其他业务和 UI 分支后，在集成分支重新运行 `npm run desktop:dir` 并进行完整主链路验收。
+- 后续可补充应用图标、发布元数据和正式代码签名策略。
+
+### 是否建议合并
+
+- 是

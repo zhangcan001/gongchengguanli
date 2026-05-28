@@ -12,8 +12,8 @@ def _default_data_dir() -> Path:
         return Path(configured)
     app_data = os.getenv("APPDATA")
     if app_data:
-        return Path(app_data) / "SmartSupervisionWorkbench" / "data"
-    return Path.home() / "SmartSupervisionWorkbench" / "data"
+        return Path(app_data) / "智能工程监理工作台" / "data"
+    return Path.home() / "智能工程监理工作台" / "data"
 
 
 def _configure_logging(data_dir: Path) -> None:
@@ -26,10 +26,17 @@ def _configure_logging(data_dir: Path) -> None:
     )
 
 
+def _write_pid_file(data_dir: Path) -> None:
+    pid_file = data_dir / "logs" / "desktop-backend.pid"
+    pid_file.parent.mkdir(parents=True, exist_ok=True)
+    pid_file.write_text(str(os.getpid()), encoding="utf-8")
+
+
 def main() -> int:
     data_dir = _default_data_dir()
     os.environ["SMART_SUPERVISION_DATA_DIR"] = str(data_dir)
     _configure_logging(data_dir)
+    _write_pid_file(data_dir)
 
     host = os.getenv("SMART_SUPERVISION_HOST", "127.0.0.1")
     port = int(os.getenv("SMART_SUPERVISION_PORT", "8765"))
