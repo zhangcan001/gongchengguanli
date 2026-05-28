@@ -133,6 +133,31 @@ def make_merged_header_workbook() -> bytes:
     return stream.getvalue()
 
 
+def make_realistic_plan_actual_workbook() -> bytes:
+    workbook = Workbook()
+    cover = workbook.active
+    cover.title = "填报说明"
+    cover.append(["进度表上传说明"])
+    cover.append(["本页包含计划完成率、实际完成率、累计完成量等填写说明，不是进度明细。"])
+    cover.append(["请以明细 sheet 为准。"])
+
+    worksheet = workbook.create_sheet("月度进度")
+    worksheet.append(["智能工程项目月度进度表"])
+    worksheet.append(["施工单位：测试施工单位"])
+    worksheet.append(["楼栋", "楼层", "任务", "计划", "实际", None, "计划日期", None, "备注"])
+    worksheet.merge_cells("E3:F3")
+    worksheet.merge_cells("G3:H3")
+    worksheet.append(["楼栋", "楼层", "工作内容", "完成率", "完成率", "累计完成量", "计划开始", "计划完成", "备注"])
+    worksheet.append(["", "", "", "%", "%", "m2", "日期", "日期", ""])
+    worksheet.append(["5#楼", "2层", "砌体施工", 0.75, "80.00%", "80㎡", "5月1日", to_excel(datetime(2026, 6, 30)), "正常推进"])
+    worksheet.append(["总计", None, None, None, None, "80㎡", None, None, None])
+    worksheet["D6"].number_format = "0.00%"
+
+    stream = BytesIO()
+    workbook.save(stream)
+    return stream.getvalue()
+
+
 def make_invalid_values_workbook() -> bytes:
     workbook = Workbook()
     worksheet = workbook.active
@@ -199,6 +224,29 @@ def test_merged_header_and_excel_serial_dates_are_supported(tmp_path: Path):
     assert row["period_quantity"] == 10
     assert row["planned_start_date"] == "2026-05-01"
     assert row["planned_finish_date"] == "2026-06-30"
+
+
+def test_realistic_cover_unit_row_and_plan_actual_headers(tmp_path: Path):
+    excel_path = tmp_path / "现场月度进度_2026-05-26.xlsx"
+    excel_path.write_bytes(make_realistic_plan_actual_workbook())
+
+    result = ExcelAnalysisService().analyze(excel_path)
+    targets = {mapping.source_field: mapping.target_field for mapping in result.field_mappings}
+    row = result.preview_rows[0].normalized
+
+    assert result.sheet_name == "月度进度"
+    assert result.header_row_index == 4
+    assert result.data_start_row_index == 6
+    assert result.data_date.isoformat() == "2026-05-26"
+    assert targets["计划 完成率"] == "planned_percent"
+    assert targets["实际 完成率"] == "actual_percent"
+    assert row["planned_percent"] == 75
+    assert row["actual_percent"] == 80
+    assert row["planned_start_date"] == "2026-05-01"
+    assert row["planned_finish_date"] == "2026-06-30"
+    assert result.stats.raw_row_count == 2
+    assert result.stats.skipped_row_count == 1
+    assert result.stats.importable_row_count == 1
 
 
 def test_invalid_percent_date_and_number_have_precise_messages(tmp_path: Path):
@@ -351,6 +399,7 @@ def test_sample_progress_workbooks_are_analyzable():
         "progress_multi_header_with_total_2026-05-26.xlsx": {"errors": 0, "rows": 2},
         "progress_invalid_date_percent_2026-05-26.xlsx": {"errors_min": 1, "rows": 2},
         "progress_missing_plan_actual_2026-05-26.xlsx": {"errors": 0, "rows": 2},
+        "progress_realistic_plan_actual_2026-05-26.xlsx": {"errors": 0, "rows": 1},
     }
 
     for file_name, expectation in samples.items():

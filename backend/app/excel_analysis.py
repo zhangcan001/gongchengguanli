@@ -111,6 +111,7 @@ CODE_FIELD_KEYWORDS = ("编码", "编号", "code", "清单号", "序号")
 NUMERIC_FIELDS = {"total_quantity", "cumulative_quantity", "period_quantity", "weight"}
 PERCENT_FIELDS = {"planned_percent", "actual_percent"}
 DATE_FIELDS = {"planned_start_date", "planned_finish_date"}
+UNIT_ROW_TOKENS = {"单位", "计量单位", "m", "m2", "m²", "㎡", "m3", "m³", "立方米", "t", "吨", "%", "％"}
 
 
 @dataclass
@@ -356,18 +357,39 @@ class ExcelAnalysisService:
         best_sheet = worksheets[0]
         best_score = -1
         for worksheet in worksheets:
-            score = 0
-            max_rows = min(worksheet.max_row or 0, 20)
-            for row_index in range(1, max_rows + 1):
-                row = [worksheet.cell(row_index, column_index).value for column_index in range(1, (worksheet.max_column or 0) + 1)]
-                joined = " ".join(str(value) for value in row if value is not None)
-                for aliases in FIELD_ALIASES.values():
-                    if any(alias in joined for alias in aliases):
-                        score += 1
+            score = self._worksheet_candidate_score(worksheet)
             if score > best_score:
                 best_score = score
                 best_sheet = worksheet
         return best_sheet
+
+    def _worksheet_candidate_score(self, worksheet: Worksheet) -> int:
+        alias_score = 0
+        max_rows = min(worksheet.max_row or 0, 20)
+        for row_index in range(1, max_rows + 1):
+            row = [worksheet.cell(row_index, column_index).value for column_index in range(1, (worksheet.max_column or 0) + 1)]
+            joined = " ".join(str(value) for value in row if value is not None)
+            for aliases in FIELD_ALIASES.values():
+                if any(alias in joined for alias in aliases):
+                    alias_score += 1
+
+        header_row_index = self._detect_header_row(worksheet)
+        header_score = self._header_candidate_score(worksheet, header_row_index)
+        data_score = self._count_probable_data_rows(worksheet, header_row_index)
+        title_bonus = 5 if "进度" in worksheet.title or "progress" in worksheet.title.lower() else 0
+        return header_score * 10 + data_score * 2 + alias_score + title_bonus
+
+    def _count_probable_data_rows(self, worksheet: Worksheet, header_row_index: int) -> int:
+        count = 0
+        max_row = min(worksheet.max_row or header_row_index, header_row_index + 50)
+        for row_index in range(header_row_index + 1, max_row + 1):
+            row = [worksheet.cell(row_index, column_index).value for column_index in range(1, (worksheet.max_column or 0) + 1)]
+            if should_skip_row(row) or self._looks_like_title_or_note(row) or self._looks_like_repeated_header_or_unit_row(row):
+                continue
+            non_empty_count = sum(1 for value in row if has_meaningful_value(value))
+            if non_empty_count >= 2:
+                count += 1
+        return count
 
     def _detect_header_row(self, worksheet: Worksheet) -> int:
         best_row = 1
@@ -460,7 +482,7 @@ class ExcelAnalysisService:
     def _detect_data_start_row(self, worksheet: Worksheet, header_row_index: int) -> int:
         for row_index in range(header_row_index + 1, (worksheet.max_row or header_row_index) + 1):
             row = [worksheet.cell(row_index, column_index).value for column_index in range(1, (worksheet.max_column or 0) + 1)]
-            if not should_skip_row(row) and not self._looks_like_title_or_note(row):
+            if not should_skip_row(row) and not self._looks_like_title_or_note(row) and not self._looks_like_repeated_header_or_unit_row(row):
                 return row_index
         return header_row_index + 1
 
@@ -533,7 +555,7 @@ class ExcelAnalysisService:
         for row_index in range(data_start_row_index, (worksheet.max_row or data_start_row_index) + 1):
             stats.raw_row_count += 1
             values = [self._cell_value(worksheet, row_index, column_index, merged_lookup) for column_index in range(1, (worksheet.max_column or 0) + 1)]
-            if should_skip_row(values):
+            if should_skip_row(values) or self._looks_like_repeated_header_or_unit_row(values):
                 stats.skipped_row_count += 1
                 continue
 
@@ -676,6 +698,19 @@ class ExcelAnalysisService:
         if len(text_values) == 1 and any(keyword in text_values[0] for keyword in ("进度表", "进度统计", "统计表", "汇总表")):
             return True
         return False
+
+    def _looks_like_repeated_header_or_unit_row(self, values: list[Any]) -> bool:
+        text_values = [str(value).strip() for value in values if value is not None and str(value).strip()]
+        if not text_values:
+            return True
+
+        header_hits = sum(1 for value in text_values if match_field(value)[0])
+        if header_hits >= 2:
+            return True
+
+        normalized_values = [normalize_header(value).replace("²", "2").replace("³", "3") for value in text_values]
+        unit_hits = sum(1 for value in normalized_values if value in UNIT_ROW_TOKENS)
+        return unit_hits >= 2 and unit_hits >= max(2, (len(text_values) + 1) // 2)
 
     def _row_has_importable_content(self, normalized: dict[str, Any]) -> bool:
         meaningful_fields = [
